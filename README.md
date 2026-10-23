@@ -88,7 +88,7 @@ Requires JDK 21+.
 ## Authors
 
 * **Deepy** — code, build, docs. `<deepy6073@gmail.com>`
-* **Stil00000** — the server this was written for: the incident that exposed the leak,
-  production testing on a live 2014 world, and the idea of publishing it. `<stil@aerocar.ru>`
+* **[Stil-ru](https://github.com/Stil-ru)** — the server this was written for: the incident that
+  exposed the leak, production testing on a live 2014 world, and the idea of publishing it.
 
 MIT licensed.
