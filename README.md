@@ -63,4 +63,10 @@ Requires JDK 21+.
   attributed to any player.
 * Only chats listed in `bot.chats` are accepted for the Telegram → Minecraft direction.
 
+## Authors
+
+* **Deepy** — code, build, docs. `<deepy6073@gmail.com>`
+* **Stil00000** — the server this was written for: the incident that exposed the leak,
+  production testing on a live 2014 world, and the idea of publishing it. `<stil@aerocar.ru>`
+
 MIT licensed.

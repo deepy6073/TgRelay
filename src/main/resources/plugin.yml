@@ -4,7 +4,7 @@ main: world.losos.tgrelay.TgRelay
 api-version: '1.21'
 authors: [Losos World]
 description: Minecraft chat to Telegram relay with long polling and a bounded connection pool.
-website: https://github.com/
+website: https://github.com/deepy6073/TgRelay
 commands:
   tgrelay:
     description: TgRelay admin command
