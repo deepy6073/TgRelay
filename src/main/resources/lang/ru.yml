@@ -1,0 +1,31 @@
+# Русская локаль TgRelay.
+# Файл можно переопределить: положите свой lang/ru.yml в plugins/TgRelay/lang/
+_language: ru
+
+# ── запуск и конфиг ──
+started: "Мост запущен: чатов %d, long polling %d с"
+stopped: "Мост остановлен"
+no-token: "bot.token пустой — впиши токен бота в config.yml, мост выключен"
+no-chats: "bot.chats пустой — некому писать, мост выключен"
+reloaded: "TgRelay: конфиг перечитан"
+reload-failed: "TgRelay: конфиг сломан, смотри консоль"
+no-permission: "Нет прав"
+usage: "Использование: /tgrelay reload|status"
+status: "TgRelay: чатов=%d, в очереди=%d, offset=%d, придержано=%d"
+
+# ── доставка ──
+held: "в игре никого — сообщение придержано до первого входа -> %s"
+dropped: "некому сообщать: в игре никого, сообщение из Telegram пропущено -> %s"
+flushed: "отдал в игру придержанных сообщений: %d"
+chat-disabled: "чат %s отключён: бот заблокирован или чат удалён"
+queue-full: "очередь переполнена, сообщение потеряно: %s"
+
+# ── ошибки ──
+refused: "Telegram отказал: %s"
+send-failed: "не отправлено: %s"
+poll-failed: "опрос Telegram не удался: %s"
+sender-error: "ошибка отправки: %s"
+state-read-error: "не прочитал state.json: %s"
+state-write-error: "не записал state.json: %s"
+language-missing: "Нет файла локали '%s', беру английский"
+language-broken: "Не смог прочитать локаль %s: %s"

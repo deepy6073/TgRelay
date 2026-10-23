@@ -1,0 +1,31 @@
+# TgRelay 简体中文语言文件。
+# 如需修改，可在 plugins/TgRelay/lang/ 放置同名 zh.yml 覆盖。
+_language: zh
+
+# ── 启动与配置 ──
+started: "中继已启动：%d 个会话，长轮询 %d 秒"
+stopped: "中继已停止"
+no-token: "bot.token 为空 — 请在 config.yml 中填写机器人令牌，中继已禁用"
+no-chats: "bot.chats 为空 — 没有接收方，中继已禁用"
+reloaded: "TgRelay：配置已重新加载"
+reload-failed: "TgRelay：配置有误，请查看控制台"
+no-permission: "没有权限"
+usage: "用法：/tgrelay reload|status"
+status: "TgRelay：会话=%d，队列=%d，offset=%d，暂存=%d"
+
+# ── 投递 ──
+held: "服务器无人在线 — 消息已暂存，等待有人进入 -> %s"
+dropped: "无人可通知：服务器无人在线，来自 Telegram 的消息已丢弃 -> %s"
+flushed: "已向游戏发送 %d 条暂存消息"
+chat-disabled: "会话 %s 已停用：机器人被屏蔽或会话已删除"
+queue-full: "发送队列已满，消息被丢弃：%s"
+
+# ── 错误 ──
+refused: "Telegram 拒绝了消息：%s"
+send-failed: "发送失败：%s"
+poll-failed: "轮询失败：%s"
+sender-error: "发送线程错误：%s"
+state-read-error: "无法读取 state.json：%s"
+state-write-error: "无法写入 state.json：%s"
+language-missing: "找不到语言文件 '%s'，改用英文"
+language-broken: "无法读取语言文件 %s：%s"

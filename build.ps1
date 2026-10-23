@@ -75,7 +75,7 @@ $lines += $sources | ForEach-Object { "`"$($_.FullName.Replace('\', '/'))`"" }
 & $javac "@$argfile"
 if ($LASTEXITCODE -ne 0) { throw 'компиляция не прошла' }
 
-Copy-Item (Join-Path $root 'src\main\resources\*') $classes -Force
+Copy-Item (Join-Path $root 'src\main\resources\*') $classes -Recurse -Force
 
 if (Test-Path $OutJar) { Remove-Item $OutJar -Force }
 Push-Location $classes

@@ -1,0 +1,31 @@
+# English locale for TgRelay.
+# Override it by dropping your own lang/en.yml into plugins/TgRelay/lang/
+_language: en
+
+# ── startup and config ──
+started: "Relay started: %d chat(s), long polling %d s"
+stopped: "Relay stopped"
+no-token: "bot.token is empty — put your bot token into config.yml, relay disabled"
+no-chats: "bot.chats is empty — nobody to send to, relay disabled"
+reloaded: "TgRelay: config reloaded"
+reload-failed: "TgRelay: config is broken, see console"
+no-permission: "No permission"
+usage: "Usage: /tgrelay reload|status"
+status: "TgRelay: chats=%d, queued=%d, offset=%d, held=%d"
+
+# ── delivery ──
+held: "nobody online — message held until the next join -> %s"
+dropped: "nobody to tell: no players online, Telegram message dropped -> %s"
+flushed: "delivered %d held message(s) to the game"
+chat-disabled: "chat %s disabled: bot blocked or chat deleted"
+queue-full: "queue is full, message dropped: %s"
+
+# ── errors ──
+refused: "Telegram refused the message: %s"
+send-failed: "sendMessage failed: %s"
+poll-failed: "poll failed: %s"
+sender-error: "sender error: %s"
+state-read-error: "could not read state.json: %s"
+state-write-error: "could not write state.json: %s"
+language-missing: "No language file for '%s', using English"
+language-broken: "Could not read locale %s: %s"

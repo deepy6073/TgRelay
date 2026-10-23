@@ -40,9 +40,11 @@ final class TelegramApi {
 
     private final HttpClient http;
     private final String token;
+    private final Messages messages;
 
-    TelegramApi(String token) {
+    TelegramApi(String token, Messages messages) {
         this.token = token;
+        this.messages = messages;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .version(HttpClient.Version.HTTP_1_1)
@@ -132,9 +134,9 @@ final class TelegramApi {
             if (forbidden) {
                 return Result.GONE;      // повторять бессмысленно: чат мёртв
             }
-            TgRelay.log("Telegram refused message: " + description);
+            TgRelay.log(messages.get("refused", description));
         } catch (Exception error) {
-            TgRelay.log("sendMessage failed: " + error);
+            TgRelay.log(messages.get("send-failed", String.valueOf(error)));
         }
         return Result.FAILED;
     }

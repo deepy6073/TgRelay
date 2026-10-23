@@ -1,5 +1,9 @@
 # TgRelay — Minecraft chat <-> Telegram bot.
 
+# Interface language: en, ru, zh. Bundled in the jar, can be overridden by
+# dropping plugins/TgRelay/lang/<code>.yml next to this file.
+language: en
+
 bot:
   # Token from @BotFather.
   token: "PUT_BOT_TOKEN_HERE"

@@ -34,7 +34,6 @@ public final class TgRelay extends JavaPlugin {
     private final BlockingQueue<String> outbox = new LinkedBlockingQueue<>(500);
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong offset = new AtomicLong(0);
-    private final AtomicLong skippedNoPlayers = new AtomicLong(0);
     private final java.util.Deque<long[]> pendingTimes = new java.util.ArrayDeque<>();
     private final java.util.Deque<String> pendingLines = new java.util.ArrayDeque<>();
     private boolean holdWhenEmpty;
@@ -45,6 +44,7 @@ public final class TgRelay extends JavaPlugin {
     private Thread poller;
     private Thread sender;
     private Path stateFile;
+    private Messages messages;
 
     private final List<String> chats = new java.util.concurrent.CopyOnWriteArrayList<>();
     private List<String> listenChats;
@@ -63,11 +63,12 @@ public final class TgRelay extends JavaPlugin {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        messages = new Messages(this, getConfig().getString("language", "en"));
         if (!loadSettings()) {
             return;
         }
 
-        api = new TelegramApi(getConfig().getString("bot.token", ""));
+        api = new TelegramApi(getConfig().getString("bot.token", ""), messages);
 
         // offset переживает перезапуск: иначе после рестарта мост заново
         // прочитает всю накопившуюся историю и вывалит её в игровой чат
@@ -85,7 +86,7 @@ public final class TgRelay extends JavaPlugin {
         sender.start();
 
         getServer().getPluginManager().registerEvents(new McEvents(this), this);
-        getLogger().info("Relay started, " + chats.size() + " chat(s), long polling " + pollTimeout + "s");
+        getLogger().info(messages.get("started", chats.size(), pollTimeout));
     }
 
     /** Придерживает сообщение до первого входа игрока (с TTL и лимитом). */
@@ -120,7 +121,7 @@ public final class TgRelay extends JavaPlugin {
         for (String line : lines) {
             getServer().dispatchCommand(getServer().getConsoleSender(), "tellraw @a " + jsonText(line));
         }
-        log("отдал в игру придержанных сообщений: " + lines.size());
+        log(messages.get("flushed", lines.size()));
     }
 
     private long loadOffset() {
@@ -134,7 +135,7 @@ public final class TgRelay extends JavaPlugin {
                 }
             }
         } catch (Exception error) {
-            log("\u043d\u0435 \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043b state.json: " + error);
+            log(messages.get("state-read-error", String.valueOf(error)));
         }
         return 0;
     }
@@ -150,7 +151,7 @@ public final class TgRelay extends JavaPlugin {
             }
             Files.writeString(stateFile, "{\"offset\":" + value + "}", StandardCharsets.UTF_8);
         } catch (IOException error) {
-            log("не записал state.json: " + error);
+            log(messages.get("state-write-error", String.valueOf(error)));
         }
     }
 
@@ -163,16 +164,17 @@ public final class TgRelay extends JavaPlugin {
         if (sender != null) {
             sender.interrupt();
         }
-        getLogger().info("Relay stopped");
+        getLogger().info(messages.get("stopped"));
     }
 
     private boolean loadSettings() {
         reloadConfig();
         FileConfiguration config = getConfig();
+        messages = new Messages(this, config.getString("language", "en"));
 
         String token = config.getString("bot.token", "");
         if (token == null || token.isEmpty() || token.startsWith("PUT_")) {
-            getLogger().severe("bot.token is empty — put your bot token into config.yml, relay disabled");
+            getLogger().severe(messages.get("no-token"));
             getServer().getPluginManager().disablePlugin(this);
             return false;
         }
@@ -184,7 +186,7 @@ public final class TgRelay extends JavaPlugin {
             listenChats = chats;   // по умолчанию читаем оттуда же, куда пишем
         }
         if (chats.isEmpty()) {
-            getLogger().severe("bot.chats is empty — nobody to send to, relay disabled");
+            getLogger().severe(messages.get("no-chats"));
             getServer().getPluginManager().disablePlugin(this);
             return false;
         }
@@ -218,7 +220,7 @@ public final class TgRelay extends JavaPlugin {
             text = text.substring(0, 4000);
         }
         if (!outbox.offer(text)) {
-            log("queue is full, dropping: " + text.substring(0, Math.min(60, text.length())));
+            log(messages.get("queue-full", text.substring(0, Math.min(60, text.length()))));
         }
     }
 
@@ -238,7 +240,7 @@ public final class TgRelay extends JavaPlugin {
                         // пользователь заблокировал бота или чат удалён — убираем насовсем,
                         // иначе каждый чих в игре бьётся в эти двери
                         if (chats.remove(chat)) {
-                            log("чат " + chat + " отключён: бот заблокирован или чат удалён");
+                            log(messages.get("chat-disabled", chat));
                         }
                         continue;
                     }
@@ -248,7 +250,7 @@ public final class TgRelay extends JavaPlugin {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception error) {
-                log("sender error: " + error);
+                log(messages.get("sender-error", String.valueOf(error)));
             }
         }
     }
@@ -273,10 +275,9 @@ public final class TgRelay extends JavaPlugin {
                         if (getServer().getOnlinePlayers().isEmpty()) {
                             if (holdWhenEmpty) {
                                 hold(line);
-                                log("в игре никого — сообщение придержано до первого входа -> " + line);
+                                log(messages.get("held", line));
                             } else {
-                                skippedNoPlayers.incrementAndGet();
-                                log("некому сообщать: в игре никого, сообщение из Telegram пропущено -> " + line);
+                                log(messages.get("dropped", line));
                             }
                             return;
                         }
@@ -291,7 +292,7 @@ public final class TgRelay extends JavaPlugin {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception error) {
-                log("poll failed: " + error);
+                log(messages.get("poll-failed", String.valueOf(error)));
                 try {
                     Thread.sleep(5000);   // back off instead of hammering Telegram
                 } catch (InterruptedException interrupted) {
@@ -324,25 +325,23 @@ public final class TgRelay extends JavaPlugin {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("tgrelay.admin")) {
-            sender.sendMessage(Component.text("No permission"));
+            sender.sendMessage(Component.text(messages.get("no-permission")));
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             if (loadSettings()) {
-                sender.sendMessage(Component.text("TgRelay: config reloaded"));
+                sender.sendMessage(Component.text(messages.get("reloaded")));
             } else {
-                sender.sendMessage(Component.text("TgRelay: config is broken, see console"));
+                sender.sendMessage(Component.text(messages.get("reload-failed")));
             }
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
-            sender.sendMessage(Component.text("TgRelay: chats=" + chats.size()
-                    + ", queued=" + outbox.size()
-                    + ", offset=" + offset.get()
-                    + ", skipped(no players)=" + skippedNoPlayers.get()));
+            sender.sendMessage(Component.text(messages.get("status",
+                    chats.size(), outbox.size(), offset.get(), pendingLines.size())));
             return true;
         }
-        sender.sendMessage(Component.text("Usage: /tgrelay reload|status"));
+        sender.sendMessage(Component.text(messages.get("usage")));
         return true;
     }
 }
