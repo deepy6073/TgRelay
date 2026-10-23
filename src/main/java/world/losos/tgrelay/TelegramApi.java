@@ -29,12 +29,15 @@ final class TelegramApi {
         final String chatId;
         final String sender;
         final String text;
+        /** Telegram user id автора: по нему привязываем аккаунт к игроку. */
+        final String fromId;
 
-        Update(long updateId, String chatId, String sender, String text) {
+        Update(long updateId, String chatId, String sender, String text, String fromId) {
             this.updateId = updateId;
             this.chatId = chatId;
             this.sender = sender;
             this.text = text;
+            this.fromId = fromId;
         }
     }
 
@@ -89,7 +92,12 @@ final class TelegramApi {
             }
 
             String sender = "telegram";
+            String fromId = "";
             if (from instanceof Map) {
+                Object id = ((Map<?, ?>) from).get("id");
+                if (id != null) {
+                    fromId = String.valueOf(id);
+                }
                 Object username = ((Map<?, ?>) from).get("username");
                 Object firstName = ((Map<?, ?>) from).get("first_name");
                 if (username instanceof String) {
@@ -106,7 +114,7 @@ final class TelegramApi {
                 chatId = id == null ? "" : String.valueOf(id);
             }
 
-            updates.add(new Update(updateId, chatId, sender, (String) text));
+            updates.add(new Update(updateId, chatId, sender, (String) text, fromId));
         }
         return updates;
     }

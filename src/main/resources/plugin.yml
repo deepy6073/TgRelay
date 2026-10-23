@@ -1,5 +1,5 @@
 name: TgRelay
-version: 1.1.0
+version: 1.2.0
 main: world.losos.tgrelay.TgRelay
 api-version: '1.21'
 authors: [Losos World]
@@ -7,10 +7,9 @@ description: Minecraft chat to Telegram relay with long polling and a bounded co
 website: https://github.com/deepy6073/TgRelay
 commands:
   tgrelay:
-    description: TgRelay admin command
-    usage: /tgrelay reload|status
-    permission: tgrelay.admin
+    description: Relay a Minecraft chat to Telegram; players can mute themselves
+    usage: "/tgrelay off|on|link|unlink|status — admin: reload|testmute"
 permissions:
   tgrelay.admin:
-    description: Allows /tgrelay
+    description: Allows /tgrelay reload, testmute and the global status
     default: op

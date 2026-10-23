@@ -10,7 +10,13 @@ import org.bukkit.event.player.PlayerAdvancementDoneEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-/** Game events that are worth forwarding to Telegram. */
+/**
+ * Game events that are worth forwarding to Telegram.
+ *
+ * Каждое событие проходит через {@code relayChat}/{@code relayEvent}: там проверяется,
+ * не заглушил ли игрок свои сообщения, и если да — строка уходит админам с префиксом
+ * {@code [mute]} вместо общего чата.
+ */
 public final class McEvents implements Listener {
 
     private final TgRelay plugin;
@@ -33,7 +39,7 @@ public final class McEvents implements Listener {
             return;
         }
         String text = PlainTextComponentSerializer.plainText().serialize(event.message());
-        plugin.relayToTelegram(event.getPlayer().getName(), text);
+        plugin.relayChat(event.getPlayer(), text);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -44,7 +50,7 @@ public final class McEvents implements Listener {
         if (!enabled("join")) {
             return;
         }
-        plugin.enqueue(template("join", "%player% joined the game")
+        plugin.relayEvent(event.getPlayer(), template("join", "%player% joined the game")
                 .replace("%player%", event.getPlayer().getName()));
     }
 
@@ -53,7 +59,7 @@ public final class McEvents implements Listener {
         if (!enabled("quit")) {
             return;
         }
-        plugin.enqueue(template("quit", "%player% left the game")
+        plugin.relayEvent(event.getPlayer(), template("quit", "%player% left the game")
                 .replace("%player%", event.getPlayer().getName()));
     }
 
@@ -65,7 +71,7 @@ public final class McEvents implements Listener {
         String death = event.deathMessage() == null
                 ? event.getEntity().getName() + " died"
                 : PlainTextComponentSerializer.plainText().serialize(event.deathMessage());
-        plugin.enqueue(template("death", "%message%").replace("%message%", death));
+        plugin.relayEvent(event.getEntity(), template("death", "%message%").replace("%message%", death));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -77,7 +83,7 @@ public final class McEvents implements Listener {
         if (key.startsWith("recipes/")) {
             return;   // too noisy, every crafted item
         }
-        plugin.enqueue(template("advancement", "%player% has made the advancement %advancement%")
+        plugin.relayEvent(event.getPlayer(), template("advancement", "%player% has made the advancement %advancement%")
                 .replace("%player%", event.getPlayer().getName())
                 .replace("%advancement%", key));
     }

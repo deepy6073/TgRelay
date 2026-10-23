@@ -43,6 +43,27 @@ queue:
   # Telegram allows about 30 messages per second per bot; keep it low.
   messages-per-second: 3
 
+# Self-mute: /tgrelay off keeps a player's messages out of the public chats.
+# They are not lost: muted messages go to the moderation channel (see below)
+# with the prefix from mute.prefix.
+mute:
+  # false — the command is refused, nobody can mute themselves.
+  enabled: true
+  # all  — mute chat and player events (join, quit, death, advancement)
+  # chat — mute only chat, events still go to the public chats
+  scope: all
+  prefix: "[mute] "
+
+# Where muted messages go. Two options, in order of priority:
+#   1. moderation.chat is set  -> everything goes there (a separate Telegram chat
+#      the players are not in). This is the simplest setup: add the bot to a chat,
+#      put its id here, done — no account linking at all.
+#   2. moderation.chat is empty -> a DM to every op (from ops.json) who linked
+#      their Telegram account with /tgrelay link.
+# Nobody linked and no chat set -> muted messages only reach the server console.
+moderation:
+  chat: ""
+
 delivery:
   # Nobody online? Hold the message and deliver it to the game when the first
   # player joins, instead of dropping it. Set to false to drop immediately.

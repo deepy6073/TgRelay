@@ -10,8 +10,8 @@ no-chats: "bot.chats is empty — nobody to send to, relay disabled"
 reloaded: "TgRelay: config reloaded"
 reload-failed: "TgRelay: config is broken, see console"
 no-permission: "No permission"
-usage: "Usage: /tgrelay reload|status"
-status: "TgRelay: chats=%d, queued=%d, offset=%d, held=%d"
+usage: "Usage: /tgrelay off|on|link|unlink|status"
+status: "TgRelay: chats=%d, queued=%d, offset=%d, held=%d, muted=%d, links=%d"
 
 # ── delivery ──
 held: "nobody online — message held until the next join -> %s"
@@ -29,3 +29,35 @@ state-read-error: "could not read state.json: %s"
 state-write-error: "could not write state.json: %s"
 language-missing: "No language file for '%s', using English"
 language-broken: "Could not read locale %s: %s"
+
+# ── self-mute ──
+mute-on: "TgRelay: your messages no longer appear in the Telegram chat — only admins see them"
+mute-off: "TgRelay: your messages go to the Telegram chat again"
+mute-disabled: "TgRelay: self-mute is disabled on this server"
+mute-log-on: "%s muted their messages in Telegram"
+mute-log-off: "%s unmuted their messages in Telegram"
+players-only: "This subcommand works for players only"
+muted-console: "muted message (nobody to deliver it to, see /tgrelay status): %s"
+
+# ── linking a Telegram account ──
+link-code: "TgRelay: send this code to the bot in a private message: %s (valid for %d minutes)"
+link-done: "TgRelay: account linked — muted messages from admins will reach you"
+link-busy: "TgRelay: could not create a code, try again"
+unlink-done: "TgRelay: Telegram account unlinked"
+unlink-none: "TgRelay: nothing to unlink"
+links-loaded: "Telegram account links loaded: %d"
+links-imported: "imported %d admin link(s) from the old TelegramChat data"
+links-import-failed: "could not import old TelegramChat links: %s"
+admin-unreachable: "admin chat %s is unreachable (bot blocked?), skipping"
+
+# ── moderation channel ──
+moderation-status: "Muted messages go to: %s"
+moderation-chat: "chat %s"
+moderation-dm: "DM to %d of %d op(s)"
+moderation-console: "server console only (no moderation chat, no linked admins)"
+moderation-test-line: "test message from /tgrelay testmute"
+moderation-test-sent: "TgRelay: test muted message sent to %d recipient(s)"
+
+status-player: "TgRelay: your messages are %s"
+state-muted: "hidden from the public chat (admins still see them)"
+state-normal: "posted to the Telegram chat"

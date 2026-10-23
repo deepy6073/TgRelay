@@ -55,12 +55,54 @@ For a group, add the bot to the group first, otherwise Telegram answers
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `/tgrelay status` | chats, queue size, current update offset |
-| `/tgrelay reload` | re-read config.yml |
+| Command | Who | What it does |
+|---|---|---|
+| `/tgrelay off` | any player | your messages stop going to `bot.chats` |
+| `/tgrelay on` | any player | back to normal |
+| `/tgrelay link` | any player | get a one-time code, send it to the bot in a DM — links your Telegram account |
+| `/tgrelay unlink` | any player | drop the link |
+| `/tgrelay status` | any player | your own state; admins also see the relay counters |
+| `/tgrelay reload` | `tgrelay.admin` | re-read config.yml |
+| `/tgrelay testmute` | `tgrelay.admin` | send a test message through the moderation route |
 
-Permission: `tgrelay.admin` (default: op).
+### Self-mute and the moderation channel
+
+A player can take their own messages out of the public chats. They are **not deleted**:
+they go to the moderation channel with a `[mute]` prefix, so admins keep the full picture
+while everyone else sees nothing.
+
+Two ways to receive them, `moderation.chat` wins when it is set:
+
+```yaml
+moderation:
+  # 1. a separate Telegram chat the players are not in — one line, no linking at all
+  chat: "-1001234567890"
+```
+
+With `moderation.chat` empty, the plugin falls back to a **DM to every operator** that linked
+their account with `/tgrelay link`. Operators come from the server's `ops.json` — there is no
+separate admin list to maintain, and losing op stops the DMs automatically.
+
+If there is neither a moderation chat nor a linked operator, muted messages are written to the
+server console only, so nothing is lost silently.
+
+Why linking exists at all: Telegram knows a user's numeric id and `@username`, Minecraft knows
+nicknames and UUIDs, and nothing connects the two. A one-time code (`/tgrelay link`) is the
+smallest safe bridge — a stranger cannot claim somebody else's account by typing a nickname.
+
+```yaml
+mute:
+  enabled: true     # false — the command is refused
+  scope: all        # all = chat and player events, chat = chat only
+  prefix: "[mute] "
+```
+
+State files: `plugins/TgRelay/muted.txt` (who muted themselves) and `linked.txt`
+(`<telegram id> <uuid>`), both plain text and safe to edit by hand.
+
+The plugin also imports the `linkedChats` map from an old `plugins/TelegramChat/data.json`
+on first start — but only for players that are operators, and only if `linked.txt` is empty.
+Nothing else from the old plugin is read.
 
 ## Build
 
@@ -78,6 +120,8 @@ Requires JDK 21+.
 * Telegram → Minecraft messages are printed with `tellraw`, so they keep colours and are not
   attributed to any player.
 * Only chats listed in `bot.chats` are accepted for the Telegram → Minecraft direction.
+* Muted players are muted in the *outbound* direction only — their messages still appear in the
+  game chat for everyone, they just do not reach the public Telegram chats.
 
 ## Related
 

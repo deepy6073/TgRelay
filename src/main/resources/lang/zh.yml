@@ -10,8 +10,8 @@ no-chats: "bot.chats 为空 — 没有接收方，中继已禁用"
 reloaded: "TgRelay：配置已重新加载"
 reload-failed: "TgRelay：配置有误，请查看控制台"
 no-permission: "没有权限"
-usage: "用法：/tgrelay reload|status"
-status: "TgRelay：会话=%d，队列=%d，offset=%d，暂存=%d"
+usage: "用法：/tgrelay off|on|link|unlink|status"
+status: "TgRelay：聊天数=%d，队列=%d，offset=%d，暂存=%d，屏蔽=%d，绑定=%d"
 
 # ── 投递 ──
 held: "服务器无人在线 — 消息已暂存，等待有人进入 -> %s"
@@ -29,3 +29,35 @@ state-read-error: "无法读取 state.json：%s"
 state-write-error: "无法写入 state.json：%s"
 language-missing: "找不到语言文件 '%s'，改用英文"
 language-broken: "无法读取语言文件 %s：%s"
+
+# ── 自我屏蔽 ──
+mute-on: "TgRelay：你的消息不再显示在 Telegram 聊天中——只有管理员能看到"
+mute-off: "TgRelay：你的消息重新发送到 Telegram 聊天"
+mute-disabled: "TgRelay：本服务器已关闭自我屏蔽"
+mute-log-on: "%s 在 Telegram 中屏蔽了自己的消息"
+mute-log-off: "%s 重新开启了自己的消息"
+players-only: "该子命令仅供玩家使用"
+muted-console: "被屏蔽的消息（无人可投递，见 /tgrelay status）：%s"
+
+# ── 绑定 Telegram 账号 ──
+link-code: "TgRelay：请把这个码私聊发给机器人：%s（%d 分钟内有效）"
+link-done: "TgRelay：账号已绑定——管理员的屏蔽消息会发送给你"
+link-busy: "TgRelay：无法生成验证码，请重试"
+unlink-done: "TgRelay：Telegram 账号已解绑"
+unlink-none: "TgRelay：没有可解绑的账号"
+links-loaded: "已加载 Telegram 账号绑定：%d"
+links-imported: "已从旧 TelegramChat 数据导入 %d 个管理员绑定"
+links-import-failed: "无法导入旧的 TelegramChat 绑定：%s"
+admin-unreachable: "管理员聊天 %s 不可达（机器人被屏蔽？），跳过"
+
+# ── 审核通道 ──
+moderation-status: "屏蔽消息发送到：%s"
+moderation-chat: "聊天 %s"
+moderation-dm: "私聊 %d/%d 位管理员"
+moderation-console: "仅服务器控制台（未设置审核聊天，也没有已绑定的管理员）"
+moderation-test-line: "来自 /tgrelay testmute 的测试消息"
+moderation-test-sent: "TgRelay：测试屏蔽消息已发送给 %d 个接收者"
+
+status-player: "TgRelay：你的消息%s"
+state-muted: "已从公共聊天中隐藏（管理员仍可见）"
+state-normal: "会发送到 Telegram 聊天"

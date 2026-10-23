@@ -10,8 +10,8 @@ no-chats: "bot.chats пустой — некому писать, мост вык
 reloaded: "TgRelay: конфиг перечитан"
 reload-failed: "TgRelay: конфиг сломан, смотри консоль"
 no-permission: "Нет прав"
-usage: "Использование: /tgrelay reload|status"
-status: "TgRelay: чатов=%d, в очереди=%d, offset=%d, придержано=%d"
+usage: "Использование: /tgrelay off|on|link|unlink|status"
+status: "TgRelay: чатов=%d, в очереди=%d, offset=%d, придержано=%d, заглушено=%d, привязок=%d"
 
 # ── доставка ──
 held: "в игре никого — сообщение придержано до первого входа -> %s"
@@ -29,3 +29,35 @@ state-read-error: "не прочитал state.json: %s"
 state-write-error: "не записал state.json: %s"
 language-missing: "Нет файла локали '%s', беру английский"
 language-broken: "Не смог прочитать локаль %s: %s"
+
+# ── заглушка своих сообщений ──
+mute-on: "TgRelay: твои сообщения больше не показываются в чате Телеграма — их видят только админы"
+mute-off: "TgRelay: твои сообщения снова идут в чат Телеграма"
+mute-disabled: "TgRelay: заглушка на этом сервере выключена"
+mute-log-on: "%s заглушил свои сообщения в Телеграме"
+mute-log-off: "%s снова включил свои сообщения в Телеграме"
+players-only: "Эта подкоманда работает только для игроков"
+muted-console: "заглушённое сообщение (доставлять некому, смотри /tgrelay status): %s"
+
+# ── привязка телеграм-аккаунта ──
+link-code: "TgRelay: отправь боту в личку этот код: %s (действует %d минут)"
+link-done: "TgRelay: аккаунт привязан — заглушённые сообщения админов будут приходить тебе"
+link-busy: "TgRelay: не смог создать код, попробуй ещё раз"
+unlink-done: "TgRelay: телеграм-аккаунт отвязан"
+unlink-none: "TgRelay: отвязывать нечего"
+links-loaded: "Загружено привязок телеграм-аккаунтов: %d"
+links-imported: "импортировал %d привязк(и) админов из старой базы TelegramChat"
+links-import-failed: "не смог импортировать старые привязки TelegramChat: %s"
+admin-unreachable: "чат админа %s недоступен (бот заблокирован?), пропускаю"
+
+# ── канал модерации ──
+moderation-status: "Заглушённые сообщения уходят: %s"
+moderation-chat: "чат %s"
+moderation-dm: "в личку %d из %d опов"
+moderation-console: "только в консоль сервера (админ-чат не задан, привязанных опов нет)"
+moderation-test-line: "тестовое сообщение из /tgrelay testmute"
+moderation-test-sent: "TgRelay: тестовое заглушённое сообщение отправлено получателям: %d"
+
+status-player: "TgRelay: твои сообщения %s"
+state-muted: "скрыты из общего чата (админы их видят)"
+state-normal: "показываются в чате Телеграма"
