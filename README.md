@@ -13,12 +13,19 @@ with real players, not in a benchmark.
 
 ## Why another relay?
 
-The classic `TelegramChat` plugin (1.0.21, December 2022, last release) calls `getUpdates`
+The classic [`TelegramChat`](https://github.com/mastercake10/TelegramChat) plugin (1.0.21, December 2022,
+last release; [SpigotMC page](https://www.spigotmc.org/resources/telegramchat.16576/)) calls `getUpdates`
 in a tight loop and leaves every socket behind. On a busy or quiet server alike it leaks
 about **two connections per second** — several thousand per hour. Windows runs out of
 ephemeral ports, and then *everything else* on the machine starts failing with
 `No buffer space available (maximum connections reached?)`: Bedrock players get dropped,
 RCON stalls, plugins cannot reach Mojang.
+
+**This is not a fork of it.** No code, classes or resources were taken from TelegramChat — the
+plugin was written from scratch against the modern Paper API. What is borrowed is the diagnosis
+(and the fact that a chat relay with long polling is still useful in 2026), not the implementation.
+The two projects can be installed side by side; only one of them should hold a bot token at a time,
+because Telegram allows a single `getUpdates` consumer per bot.
 
 TgRelay does it properly:
 
@@ -71,6 +78,12 @@ Requires JDK 21+.
 * Telegram → Minecraft messages are printed with `tellraw`, so they keep colours and are not
   attributed to any player.
 * Only chats listed in `bot.chats` are accepted for the Telegram → Minecraft direction.
+
+## Related
+
+* [mastercake10/TelegramChat](https://github.com/mastercake10/TelegramChat) — the plugin that
+  started this genre, and the source of the incident described above.
+* [SpigotMC: TelegramChat](https://www.spigotmc.org/resources/telegramchat.16576/) — its resource page.
 
 ## Authors
 
