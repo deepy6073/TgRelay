@@ -2,6 +2,15 @@
 
 Minecraft chat ↔ Telegram bot, without the connection leak.
 
+## From Losos World
+
+This plugin was written for **[Losos World](https://map.losos.world/)** — a survival Minecraft server
+that has been running since 2014 without a single wipe, without private zones and without donations.
+Java and Bedrock, `mc.losos.world`. The live map is at **[map.losos.world](https://map.losos.world/)**.
+
+The relay exists because that server ran into the problem described below — on a real world
+with real players, not in a benchmark.
+
 ## Why another relay?
 
 The classic `TelegramChat` plugin (1.0.21, December 2022, last release) calls `getUpdates`
