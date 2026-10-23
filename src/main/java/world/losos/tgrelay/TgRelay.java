@@ -46,7 +46,7 @@ public final class TgRelay extends JavaPlugin {
     private Thread sender;
     private Path stateFile;
 
-    private List<String> chats;
+    private final List<String> chats = new java.util.concurrent.CopyOnWriteArrayList<>();
     private List<String> listenChats;
     private String formatFromMc;
     private String formatToMc;
@@ -177,8 +177,9 @@ public final class TgRelay extends JavaPlugin {
             return false;
         }
 
-        chats = config.getStringList("bot.chats");
-        listenChats = config.getStringList("bot.listen");
+        chats.clear();
+        chats.addAll(config.getStringList("bot.chats"));
+        listenChats = new java.util.ArrayList<>(config.getStringList("bot.listen"));
         if (listenChats.isEmpty()) {
             listenChats = chats;   // по умолчанию читаем оттуда же, куда пишем
         }
@@ -232,7 +233,15 @@ public final class TgRelay extends JavaPlugin {
                     if (!running.get()) {
                         return;
                     }
-                    api.send(chat, text);
+                    TelegramApi.Result result = api.send(chat, text);
+                    if (result == TelegramApi.Result.GONE) {
+                        // пользователь заблокировал бота или чат удалён — убираем насовсем,
+                        // иначе каждый чих в игре бьётся в эти двери
+                        if (chats.remove(chat)) {
+                            log("чат " + chat + " отключён: бот заблокирован или чат удалён");
+                        }
+                        continue;
+                    }
                     Thread.sleep(1000L / messagesPerSecond);
                 }
             } catch (InterruptedException interrupted) {

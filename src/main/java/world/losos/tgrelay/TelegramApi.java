@@ -21,6 +21,9 @@ import java.util.Map;
  */
 final class TelegramApi {
 
+    /** Result of a delivery attempt: OK, chat is gone for good, or a temporary failure. */
+    enum Result { OK, GONE, FAILED }
+
     static final class Update {
         final long updateId;
         final String chatId;
@@ -106,8 +109,8 @@ final class TelegramApi {
         return updates;
     }
 
-    /** Sends a message. Returns false when Telegram rejected it (bad token, kicked from chat...). */
-    boolean send(String chatId, String text) {
+    /** Sends a message and tells the caller whether retrying this chat makes sense. */
+    Result send(String chatId, String text) {
         String query = "chat_id=" + encode(chatId)
                 + "&text=" + encode(text)
                 + "&disable_web_page_preview=true"
@@ -115,15 +118,25 @@ final class TelegramApi {
         try {
             Map<String, Object> answer = call("sendMessage", query, 15);
             if (answer != null && Boolean.TRUE.equals(answer.get("ok"))) {
-                return true;
+                return Result.OK;
             }
-            if (answer != null && answer.get("description") != null) {
-                TgRelay.log("Telegram refused message: " + answer.get("description"));
+
+            String description = answer == null ? "" : String.valueOf(answer.get("description"));
+            Object code = answer == null ? null : answer.get("error_code");
+            boolean forbidden = (code instanceof Number && ((Number) code).intValue() == 403)
+                    || description.contains("bot was blocked")
+                    || description.contains("chat not found")
+                    || description.contains("user is deactivated")
+                    || description.contains("bot is not a member");
+
+            if (forbidden) {
+                return Result.GONE;      // повторять бессмысленно: чат мёртв
             }
+            TgRelay.log("Telegram refused message: " + description);
         } catch (Exception error) {
             TgRelay.log("sendMessage failed: " + error);
         }
-        return false;
+        return Result.FAILED;
     }
 
     private Map<String, Object> call(String method, String query, int timeoutSeconds) throws Exception {
