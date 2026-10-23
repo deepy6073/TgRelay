@@ -38,6 +38,9 @@ public final class McEvents implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        // если в игре никого не было, придержанные сообщения из Telegram отдаём сейчас
+        plugin.flushPending();
+
         if (!enabled("join")) {
             return;
         }

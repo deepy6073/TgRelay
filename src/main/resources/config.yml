@@ -6,6 +6,10 @@ bot:
   # Where to post. Can be a private chat id (123456789), a group (-1001234567890)
   # or a public channel (@my_channel). Add one line per destination.
   chats: []
+  # Where to accept messages from. Empty means "same as chats".
+  # A group id (negative, -100...) works too: the sender is taken from the
+  # message author, not from the chat, so group messages keep real names.
+  listen: []
 
 format:
   # Minecraft -> Telegram
@@ -34,3 +38,10 @@ polling:
 queue:
   # Telegram allows about 30 messages per second per bot; keep it low.
   messages-per-second: 3
+
+delivery:
+  # Nobody online? Hold the message and deliver it to the game when the first
+  # player joins, instead of dropping it. Set to false to drop immediately.
+  hold-when-empty: true
+  hold-max-minutes: 10
+  hold-max-messages: 20

@@ -35,6 +35,11 @@ public final class TgRelay extends JavaPlugin {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong offset = new AtomicLong(0);
     private final AtomicLong skippedNoPlayers = new AtomicLong(0);
+    private final java.util.Deque<long[]> pendingTimes = new java.util.ArrayDeque<>();
+    private final java.util.Deque<String> pendingLines = new java.util.ArrayDeque<>();
+    private boolean holdWhenEmpty;
+    private int holdMaxMinutes;
+    private int holdMaxMessages;
 
     private TelegramApi api;
     private Thread poller;
@@ -42,6 +47,7 @@ public final class TgRelay extends JavaPlugin {
     private Path stateFile;
 
     private List<String> chats;
+    private List<String> listenChats;
     private String formatFromMc;
     private String formatToMc;
     private int pollTimeout;
@@ -80,6 +86,41 @@ public final class TgRelay extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new McEvents(this), this);
         getLogger().info("Relay started, " + chats.size() + " chat(s), long polling " + pollTimeout + "s");
+    }
+
+    /** Придерживает сообщение до первого входа игрока (с TTL и лимитом). */
+    private void hold(String line) {
+        synchronized (pendingLines) {
+            pendingLines.addLast(line);
+            pendingTimes.addLast(new long[]{System.currentTimeMillis()});
+
+            while (pendingLines.size() > holdMaxMessages) {
+                pendingLines.removeFirst();
+                pendingTimes.removeFirst();
+            }
+            long deadline = System.currentTimeMillis() - holdMaxMinutes * 60_000L;
+            while (!pendingTimes.isEmpty() && pendingTimes.peekFirst()[0] < deadline) {
+                pendingTimes.removeFirst();
+                pendingLines.removeFirst();
+            }
+        }
+    }
+
+    /** Отдаёт придержанные сообщения в игру — вызывается при входе игрока. */
+    void flushPending() {
+        java.util.List<String> lines;
+        synchronized (pendingLines) {
+            lines = new java.util.ArrayList<>(pendingLines);
+            pendingLines.clear();
+            pendingTimes.clear();
+        }
+        if (lines.isEmpty()) {
+            return;
+        }
+        for (String line : lines) {
+            getServer().dispatchCommand(getServer().getConsoleSender(), "tellraw @a " + jsonText(line));
+        }
+        log("отдал в игру придержанных сообщений: " + lines.size());
     }
 
     private long loadOffset() {
@@ -137,6 +178,10 @@ public final class TgRelay extends JavaPlugin {
         }
 
         chats = config.getStringList("bot.chats");
+        listenChats = config.getStringList("bot.listen");
+        if (listenChats.isEmpty()) {
+            listenChats = chats;   // по умолчанию читаем оттуда же, куда пишем
+        }
         if (chats.isEmpty()) {
             getLogger().severe("bot.chats is empty — nobody to send to, relay disabled");
             getServer().getPluginManager().disablePlugin(this);
@@ -147,6 +192,9 @@ public final class TgRelay extends JavaPlugin {
         formatToMc = config.getString("format.to-minecraft", "[TG] %sender%: %message%");
         pollTimeout = Math.max(5, Math.min(50, config.getInt("polling.timeout-seconds", 25)));
         messagesPerSecond = Math.max(1, Math.min(20, config.getInt("queue.messages-per-second", 3)));
+        holdWhenEmpty = config.getBoolean("delivery.hold-when-empty", true);
+        holdMaxMinutes = Math.max(1, config.getInt("delivery.hold-max-minutes", 10));
+        holdMaxMessages = Math.max(1, config.getInt("delivery.hold-max-messages", 20));
         return true;
     }
 
@@ -214,10 +262,13 @@ public final class TgRelay extends JavaPlugin {
                     String command = "tellraw @a " + jsonText(line);
                     getServer().getScheduler().runTask(this, () -> {
                         if (getServer().getOnlinePlayers().isEmpty()) {
-                            // tellraw @a без игроков отвечает «No player was found» — вместо этого
-                            // говорим по-человечески, что сообщение пропущено
-                            skippedNoPlayers.incrementAndGet();
-                            log("некому сообщать: в игре никого, сообщение из Telegram пропущено -> " + line);
+                            if (holdWhenEmpty) {
+                                hold(line);
+                                log("в игре никого — сообщение придержано до первого входа -> " + line);
+                            } else {
+                                skippedNoPlayers.incrementAndGet();
+                                log("некому сообщать: в игре никого, сообщение из Telegram пропущено -> " + line);
+                            }
                             return;
                         }
                         getServer().dispatchCommand(getServer().getConsoleSender(), command);
