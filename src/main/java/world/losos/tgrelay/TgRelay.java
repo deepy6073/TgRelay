@@ -6,6 +6,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -30,10 +34,12 @@ public final class TgRelay extends JavaPlugin {
     private final BlockingQueue<String> outbox = new LinkedBlockingQueue<>(500);
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong offset = new AtomicLong(0);
+    private final AtomicLong skippedNoPlayers = new AtomicLong(0);
 
     private TelegramApi api;
     private Thread poller;
     private Thread sender;
+    private Path stateFile;
 
     private List<String> chats;
     private String formatFromMc;
@@ -56,6 +62,12 @@ public final class TgRelay extends JavaPlugin {
         }
 
         api = new TelegramApi(getConfig().getString("bot.token", ""));
+
+        // offset переживает перезапуск: иначе после рестарта мост заново
+        // прочитает всю накопившуюся историю и вывалит её в игровой чат
+        stateFile = getDataFolder().toPath().resolve("state.json");
+        offset.set(loadOffset());
+
         running.set(true);
 
         poller = new Thread(this::pollLoop, "TgRelay-poller");
@@ -68,6 +80,37 @@ public final class TgRelay extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new McEvents(this), this);
         getLogger().info("Relay started, " + chats.size() + " chat(s), long polling " + pollTimeout + "s");
+    }
+
+    private long loadOffset() {
+        try {
+            if (stateFile != null && Files.exists(stateFile)) {
+                String raw = Files.readString(stateFile, StandardCharsets.UTF_8);
+                java.util.regex.Matcher matcher =
+                        java.util.regex.Pattern.compile("\"offset\"\\s*:\\s*(\\d+)").matcher(raw);
+                if (matcher.find()) {
+                    return Long.parseLong(matcher.group(1));
+                }
+            }
+        } catch (Exception error) {
+            log("\u043d\u0435 \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043b state.json: " + error);
+        }
+        return 0;
+    }
+
+    private void saveOffset(long value) {
+        try {
+            if (stateFile == null) {
+                return;
+            }
+            Path parent = stateFile.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(stateFile, "{\"offset\":" + value + "}", StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            log("не записал state.json: " + error);
+        }
     }
 
     @Override
@@ -157,8 +200,9 @@ public final class TgRelay extends JavaPlugin {
         while (running.get()) {
             try {
                 List<TelegramApi.Update> updates = api.poll(offset.get() + 1, pollTimeout);
+                long highest = offset.get();
                 for (TelegramApi.Update update : updates) {
-                    offset.set(Math.max(offset.get(), update.updateId));
+                    highest = Math.max(highest, update.updateId);
 
                     if (!chats.contains(update.chatId)) {
                         continue;   // ignore chats we were not configured for
@@ -168,8 +212,20 @@ public final class TgRelay extends JavaPlugin {
                             .replace("%sender%", update.sender)
                             .replace("%message%", update.text);
                     String command = "tellraw @a " + jsonText(line);
-                    getServer().getScheduler().runTask(this, () ->
-                            getServer().dispatchCommand(getServer().getConsoleSender(), command));
+                    getServer().getScheduler().runTask(this, () -> {
+                        if (getServer().getOnlinePlayers().isEmpty()) {
+                            // tellraw @a без игроков отвечает «No player was found» — вместо этого
+                            // говорим по-человечески, что сообщение пропущено
+                            skippedNoPlayers.incrementAndGet();
+                            log("некому сообщать: в игре никого, сообщение из Telegram пропущено -> " + line);
+                            return;
+                        }
+                        getServer().dispatchCommand(getServer().getConsoleSender(), command);
+                    });
+                }
+                if (highest != offset.get()) {
+                    offset.set(highest);
+                    saveOffset(highest);
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -222,7 +278,8 @@ public final class TgRelay extends JavaPlugin {
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             sender.sendMessage(Component.text("TgRelay: chats=" + chats.size()
                     + ", queued=" + outbox.size()
-                    + ", offset=" + offset.get()));
+                    + ", offset=" + offset.get()
+                    + ", skipped(no players)=" + skippedNoPlayers.get()));
             return true;
         }
         sender.sendMessage(Component.text("Usage: /tgrelay reload|status"));
