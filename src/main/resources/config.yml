@@ -1,0 +1,36 @@
+# TgRelay — Minecraft chat <-> Telegram bot.
+
+bot:
+  # Token from @BotFather.
+  token: "PUT_BOT_TOKEN_HERE"
+  # Where to post. Can be a private chat id (123456789), a group (-1001234567890)
+  # or a public channel (@my_channel). Add one line per destination.
+  chats: []
+
+format:
+  # Minecraft -> Telegram
+  from-minecraft: "%player%: %message%"
+  # Telegram -> Minecraft (printed to the game via tellraw)
+  to-minecraft: "[TG] %sender%: %message%"
+
+events:
+  chat: true
+  join: true
+  quit: true
+  death: true
+  advancement: true
+
+  join-format: "%player% joined the game"
+  quit-format: "%player% left the game"
+  death-format: "%message%"
+  advancement-format: "%player% has made the advancement %advancement%"
+
+polling:
+  # getUpdates long-poll timeout. 25-50 is fine: one connection stays open
+  # instead of one per second. Do not set 0 — that is what turns a relay
+  # into a polling hammer.
+  timeout-seconds: 25
+
+queue:
+  # Telegram allows about 30 messages per second per bot; keep it low.
+  messages-per-second: 3

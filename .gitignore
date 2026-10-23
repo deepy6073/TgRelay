@@ -1,0 +1,19 @@
+# сборка
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+build/
+out/
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# служебное
+.DS_Store
+Thumbs.db
+*.log
