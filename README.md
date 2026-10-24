@@ -2,6 +2,9 @@
 
 Minecraft chat ↔ Telegram bot, without the connection leak.
 
+[![Hangar](https://img.shields.io/badge/Hangar-TgRelay-86d15c)](https://hangar.papermc.io/Stil00000/TgRelay)
+[![License: MIT](https://img.shields.io/badge/license-MIT-86d15c)](LICENSE)
+
 ## From Losos World
 
 This plugin was written for **[Losos World](https://map.losos.world/)** — a survival Minecraft server
@@ -37,7 +40,7 @@ TgRelay does it properly:
 
 ## Install
 
-1. Drop `TgRelay.jar` into `plugins/`.
+1. Download `TgRelay.jar` from [Hangar](https://hangar.papermc.io/Stil00000/TgRelay) or the [GitHub releases](https://github.com/deepy6073/TgRelay/releases) and drop it into `plugins/`.
 2. Start the server once, then edit `plugins/TgRelay/config.yml`:
 
 ```yaml
