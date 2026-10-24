@@ -30,6 +30,27 @@ final class Json {
         return value;
     }
 
+    /** Wraps a string into a JSON literal — used to build the tiny bridge payloads. */
+    static String quote(String text) {
+        StringBuilder builder = new StringBuilder(text.length() + 2).append('"');
+        for (char ch : text.toCharArray()) {
+            switch (ch) {
+                case '"': builder.append("\\\""); break;
+                case '\\': builder.append("\\\\"); break;
+                case '\n': builder.append("\\n"); break;
+                case '\r': builder.append("\\r"); break;
+                case '\t': builder.append("\\t"); break;
+                default:
+                    if (ch < 0x20) {
+                        builder.append(String.format("\\u%04x", (int) ch));
+                    } else {
+                        builder.append(ch);
+                    }
+            }
+        }
+        return builder.append('"').toString();
+    }
+
     @SuppressWarnings("unchecked")
     static Map<String, Object> parseObject(String text) {
         Object value = parse(text);

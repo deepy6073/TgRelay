@@ -47,10 +47,13 @@ public final class TgRelay extends JavaPlugin {
     private static final class Outgoing {
         final String text;
         final List<String> targets;
+        /** Заглушённое сообщение: узел-ступица отправит его в канал модерации, а не в общий чат. */
+        final boolean muted;
 
-        Outgoing(String text, List<String> targets) {
+        Outgoing(String text, List<String> targets, boolean muted) {
             this.text = text;
             this.targets = targets;
+            this.muted = muted;
         }
     }
 
@@ -67,6 +70,13 @@ public final class TgRelay extends JavaPlugin {
     private static final String CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private static final long LINK_CODE_TTL_MS = 10 * 60_000L;
 
+    /** Один сервер и свой бот — как было до 1.3.0. */
+    static final String MODE_STANDALONE = "standalone";
+    /** Бот живёт здесь: свой чат плюс чат серверов-сателлитов. */
+    static final String MODE_HUB = "hub";
+    /** Бота нет: чат уходит на ступицу, её сообщения печатаются здесь. */
+    static final String MODE_SPOKE = "spoke";
+
     private static TgRelay instance;
 
     private final BlockingQueue<Outgoing> outbox = new LinkedBlockingQueue<>(500);
@@ -79,6 +89,7 @@ public final class TgRelay extends JavaPlugin {
     private int holdMaxMessages;
 
     private TelegramApi api;
+    private Bridge bridge;
     private Thread poller;
     private Thread sender;
     private Path stateFile;
@@ -90,6 +101,17 @@ public final class TgRelay extends JavaPlugin {
     private String formatToMc;
     private int pollTimeout;
     private int messagesPerSecond;
+
+    /* ── несколько серверов на одном боте ── */
+    private String serverName = "";
+    private String relayMode = MODE_STANDALONE;
+    private String relayToken = "";
+    private String relayBind = "";
+    private String relayHub = "";
+    private List<String> relaySpokes = new ArrayList<>();
+    /** Настройки, с которыми поднят мост: после reload их смена требует перезапуска. */
+    private String bridgeSignature = "";
+    private String botToken = "";
 
     /* ── заглушка своих сообщений ── */
     private final Set<UUID> muted = ConcurrentHashMap.newKeySet();
@@ -117,7 +139,7 @@ public final class TgRelay extends JavaPlugin {
             return;
         }
 
-        api = new TelegramApi(getConfig().getString("bot.token", ""), messages);
+        api = new TelegramApi(botToken, messages);
 
         // offset переживает перезапуск: иначе после рестарта мост заново
         // прочитает всю накопившуюся историю и вывалит её в игровой чат
@@ -130,20 +152,58 @@ public final class TgRelay extends JavaPlugin {
         links.open(getDataFolder().toPath().resolve("linked.txt"));
         importLegacyLinks();
 
+        startBridge();
+
         running.set(true);
 
-        poller = new Thread(this::pollLoop, "TgRelay-poller");
-        poller.setDaemon(true);
-        poller.start();
+        if (!isSpoke()) {
+            poller = new Thread(this::pollLoop, "TgRelay-poller");
+            poller.setDaemon(true);
+            poller.start();
+        }
 
         sender = new Thread(this::sendLoop, "TgRelay-sender");
         sender.setDaemon(true);
         sender.start();
 
         getServer().getPluginManager().registerEvents(new McEvents(this), this);
-        getLogger().info(messages.get("started", chats.size(), pollTimeout));
+        if (isSpoke()) {
+            getLogger().info(messages.get("started-spoke", serverName, relayHub));
+        } else if (isHub()) {
+            getLogger().info(messages.get("started-hub", chats.size(), pollTimeout, relaySpokes.size()));
+        } else {
+            getLogger().info(messages.get("started", chats.size(), pollTimeout));
+        }
         if (links.size() > 0) {
             getLogger().info(messages.get("links-loaded", links.size()));
+        }
+    }
+
+    /** Поднимает HTTP-мост: ступица слушает сателлиты, сателлит слушает ступицу. */
+    private void startBridge() {
+        if (MODE_STANDALONE.equals(relayMode)) {
+            return;
+        }
+        bridge = new Bridge(messages, isSpoke(), relayToken, relaySpokes, relayHub,
+                new Bridge.Events() {
+                    @Override
+                    public void onSpokeEvent(String text, boolean muted) {
+                        acceptFromSpoke(text, muted);
+                    }
+
+                    @Override
+                    public void onInbound(String text) {
+                        showInGame(text);
+                    }
+                });
+        bridgeSignature = bridgeSignature();
+        try {
+            String bound = bridge.listen(relayBind);
+            if (bound != null) {
+                log(messages.get("bridge-listen", bound));
+            }
+        } catch (Exception error) {
+            log(messages.get("bridge-failed", relayBind, String.valueOf(error)));
         }
     }
 
@@ -323,6 +383,10 @@ public final class TgRelay extends JavaPlugin {
         if (sender != null) {
             sender.interrupt();
         }
+        if (bridge != null) {
+            bridge.close();
+            bridge = null;
+        }
         getLogger().info(messages.get("stopped"));
     }
 
@@ -331,9 +395,38 @@ public final class TgRelay extends JavaPlugin {
         FileConfiguration config = getConfig();
         messages = new Messages(this, config.getString("language", "en"));
 
-        String token = config.getString("bot.token", "");
-        if (token == null || token.isEmpty() || token.startsWith("PUT_")) {
-            getLogger().severe(messages.get("no-token"));
+        serverName = text(config.getString("server.name", ""));
+        relayMode = text(config.getString("relay.mode", MODE_STANDALONE)).toLowerCase(Locale.ROOT);
+        if (!MODE_HUB.equals(relayMode) && !MODE_SPOKE.equals(relayMode)) {
+            relayMode = MODE_STANDALONE;
+        }
+        relayToken = text(config.getString("relay.token", ""));
+        relayBind = text(config.getString("relay.bind", ""));
+        relayHub = text(config.getString("relay.hub", ""));
+        relaySpokes = new ArrayList<>();
+        for (String url : config.getStringList("relay.spokes")) {
+            String trimmed = text(url);
+            if (!trimmed.isEmpty()) {
+                relaySpokes.add(trimmed);
+            }
+        }
+
+        botToken = text(config.getString("bot.token", ""));
+        if (MODE_SPOKE.equals(relayMode)) {
+            if (relayHub.isEmpty()) {
+                getLogger().severe(messages.get("no-hub-url"));
+                getServer().getPluginManager().disablePlugin(this);
+                return false;
+            }
+        } else {
+            if (botToken.isEmpty() || botToken.startsWith("PUT_")) {
+                getLogger().severe(messages.get("no-token"));
+                getServer().getPluginManager().disablePlugin(this);
+                return false;
+            }
+        }
+        if (!MODE_STANDALONE.equals(relayMode) && relayToken.isEmpty()) {
+            getLogger().severe(messages.get("no-relay-token"));
             getServer().getPluginManager().disablePlugin(this);
             return false;
         }
@@ -344,7 +437,7 @@ public final class TgRelay extends JavaPlugin {
         if (listenChats.isEmpty()) {
             listenChats = chats;   // по умолчанию читаем оттуда же, куда пишем
         }
-        if (chats.isEmpty()) {
+        if (chats.isEmpty() && !MODE_SPOKE.equals(relayMode)) {
             getLogger().severe(messages.get("no-chats"));
             getServer().getPluginManager().disablePlugin(this);
             return false;
@@ -365,7 +458,39 @@ public final class TgRelay extends JavaPlugin {
         if (moderationChat == null) {
             moderationChat = "";
         }
+
+        // Мост поднимается один раз в onEnable: сокет и потоки на лету не переедут,
+        // поэтому на reload честно говорим, что нужен перезапуск, а не делаем вид.
+        if (!bridgeSignature.isEmpty() && !bridgeSignature.equals(bridgeSignature())) {
+            getLogger().warning(messages.get("restart-required"));
+        }
         return true;
+    }
+
+    private static String text(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    boolean isSpoke() {
+        return MODE_SPOKE.equals(relayMode);
+    }
+
+    boolean isHub() {
+        return MODE_HUB.equals(relayMode);
+    }
+
+    /** Всё, что нельзя поменять без перезапуска сервера. */
+    private String bridgeSignature() {
+        return String.join("|", relayMode, relayBind, relayToken, relayHub,
+                String.join(",", relaySpokes), botToken);
+    }
+
+    /** Подставляет имя сервера: {@code %server%} в шаблонах сообщений. */
+    private String withServer(String line) {
+        if (serverName.isEmpty() || line.indexOf("%server%") < 0) {
+            return line;
+        }
+        return line.replace("%server%", serverName);
     }
 
     /* ── Minecraft -> Telegram ── */
@@ -375,9 +500,9 @@ public final class TgRelay extends JavaPlugin {
         if (message == null || message.isBlank()) {
             return;
         }
-        String line = formatFromMc
+        String line = withServer(formatFromMc
                 .replace("%player%", player.getName())
-                .replace("%message%", message);
+                .replace("%message%", message));
         deliver(player.getUniqueId(), line, true);
     }
 
@@ -386,7 +511,7 @@ public final class TgRelay extends JavaPlugin {
         if (line == null || line.isBlank()) {
             return;
         }
-        deliver(player.getUniqueId(), line, muteEvents);
+        deliver(player.getUniqueId(), withServer(line), muteEvents);
     }
 
     private void deliver(UUID player, String line, boolean muteApplies) {
@@ -400,6 +525,25 @@ public final class TgRelay extends JavaPlugin {
     /** Заглушённое сообщение: админский чат, личка привязанным опам или консоль. */
     private void relayMuted(String line) {
         String text = mutePrefix + line;
+        if (isSpoke()) {
+            // куда именно — решает ступица: у неё канал модерации и привязки админов
+            enqueueMuted(text);
+            return;
+        }
+        List<String> targets = moderationTargets();
+        if (targets.isEmpty()) {
+            log(messages.get("muted-console", text));
+            return;
+        }
+        enqueueTo(targets, text);
+    }
+
+    /** Ступица: строка от сателлита. Заглушённые уходят в канал модерации, не в общий чат. */
+    private void acceptFromSpoke(String text, boolean muted) {
+        if (!muted) {
+            enqueue(text);
+            return;
+        }
         List<String> targets = moderationTargets();
         if (targets.isEmpty()) {
             log(messages.get("muted-console", text));
@@ -422,13 +566,22 @@ public final class TgRelay extends JavaPlugin {
     }
 
     private void enqueueTo(List<String> targets, String text) {
+        enqueueInternal(targets, text, false);
+    }
+
+    /** Сателлит: пометить строку как заглушённую — ступица сама выберет адресата. */
+    private void enqueueMuted(String text) {
+        enqueueInternal(null, text, true);
+    }
+
+    private void enqueueInternal(List<String> targets, String text, boolean muted) {
         if (text == null || text.isBlank()) {
             return;
         }
         if (text.length() > 4000) {
             text = text.substring(0, 4000);
         }
-        if (!outbox.offer(new Outgoing(text, targets))) {
+        if (!outbox.offer(new Outgoing(text, targets, muted))) {
             log(messages.get("queue-full", text.substring(0, Math.min(60, text.length()))));
         }
     }
@@ -438,6 +591,10 @@ public final class TgRelay extends JavaPlugin {
             try {
                 Outgoing item = outbox.poll(1, TimeUnit.SECONDS);
                 if (item == null) {
+                    continue;
+                }
+                if (isSpoke()) {
+                    sendToHub(item);
                     continue;
                 }
                 List<String> targets = item.targets != null ? item.targets : chats;
@@ -467,6 +624,34 @@ public final class TgRelay extends JavaPlugin {
         }
     }
 
+    /** Сателлит: отдать строку ступице. Три попытки, потом честно ругаемся в лог. */
+    private void sendToHub(Outgoing item) {
+        if (bridge == null) {
+            log(messages.get("hub-unreachable", relayHub, "bridge is not running"));
+            return;
+        }
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                bridge.postEvent(item.text, item.muted);
+                return;
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (Exception error) {
+                if (attempt == 3) {
+                    log(messages.get("hub-unreachable", relayHub, String.valueOf(error)));
+                    return;
+                }
+                try {
+                    Thread.sleep(1000L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
     private void pollLoop() {
         while (running.get()) {
             try {
@@ -482,22 +667,13 @@ public final class TgRelay extends JavaPlugin {
                         continue;   // ignore chats we were not configured for
                     }
 
-                    String line = formatToMc
+                    String line = withServer(formatToMc
                             .replace("%sender%", update.sender)
-                            .replace("%message%", update.text);
-                    String command = "tellraw @a " + jsonText(line);
-                    getServer().getScheduler().runTask(this, () -> {
-                        if (getServer().getOnlinePlayers().isEmpty()) {
-                            if (holdWhenEmpty) {
-                                hold(line);
-                                log(messages.get("held", line));
-                            } else {
-                                log(messages.get("dropped", line));
-                            }
-                            return;
-                        }
-                        getServer().dispatchCommand(getServer().getConsoleSender(), command);
-                    });
+                            .replace("%message%", update.text));
+                    if (isHub() && bridge != null) {
+                        bridge.pushInbound(line);   // то же сообщение — в чат сателлитов
+                    }
+                    showInGame(line);
                 }
                 if (highest != offset.get()) {
                     offset.set(highest);
@@ -516,6 +692,26 @@ public final class TgRelay extends JavaPlugin {
                 }
             }
         }
+    }
+
+    /**
+     * Печатает строку из Telegram в игре. Общая точка для своего бота и для ступицы:
+     * если в игре никого нет — строка придерживается до первого входа.
+     */
+    private void showInGame(String line) {
+        String command = "tellraw @a " + jsonText(line);
+        getServer().getScheduler().runTask(this, () -> {
+            if (getServer().getOnlinePlayers().isEmpty()) {
+                if (holdWhenEmpty) {
+                    hold(line);
+                    log(messages.get("held", line));
+                } else {
+                    log(messages.get("dropped", line));
+                }
+                return;
+            }
+            getServer().dispatchCommand(getServer().getConsoleSender(), command);
+        });
     }
 
     /* ── привязка telegram -> игрок ── */
@@ -707,8 +903,23 @@ public final class TgRelay extends JavaPlugin {
         sender.sendMessage(Component.text(messages.get("status",
                 chats.size(), outbox.size(), offset.get(), pendingLines.size(),
                 muted.size(), links.size())));
+        sender.sendMessage(Component.text(messages.get("status-mode",
+                relayMode, serverName.isEmpty() ? "-" : serverName, bridgeWhere())));
         sender.sendMessage(Component.text(messages.get("moderation-status", moderationWhere())));
         return true;
+    }
+
+    /** С кем этот сервер разговаривает: адрес моста и число сателлитов. */
+    private String bridgeWhere() {
+        if (isSpoke()) {
+            return relayHub;
+        }
+        if (isHub()) {
+            return bridge != null
+                    ? messages.get("status-spokes", relayBind, bridge.spokeCount())
+                    : relayBind;
+        }
+        return "-";
     }
 
     /** Человеческое описание того, куда уходят `[mute]`-сообщения. */
@@ -726,8 +937,13 @@ public final class TgRelay extends JavaPlugin {
 
     private boolean testModeration(CommandSender sender) {
         List<String> targets = moderationTargets();
-        if (targets.isEmpty()) {
+        if (!isSpoke() && targets.isEmpty()) {
             sender.sendMessage(Component.text(messages.get("moderation-console")));
+            return true;
+        }
+        if (isSpoke()) {
+            relayMuted(messages.get("moderation-test-line"));
+            sender.sendMessage(Component.text(messages.get("moderation-test-sent-hub")));
             return true;
         }
         Set<UUID> ops = operatorIds();

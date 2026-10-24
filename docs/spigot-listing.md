@@ -14,7 +14,7 @@ TgRelay — Minecraft ↔ Telegram chat, no leaked sockets
 
 **Tagline:**
 ```
-Two-way Telegram bridge with long polling, a rate-limited queue and player self-mute
+Two-way Telegram bridge: long polling, a rate-limited queue, player self-mute, several servers on one bot
 ```
 
 **Category:** Chat
@@ -45,6 +45,7 @@ TgRelay does it properly:
 [*][B]One shared java.net.http.HttpClient[/B] with a bounded pool: connections are reused and closed on shutdown.
 [*][B]Outbound queue with a rate limit[/B] — a chatty server cannot flood Telegram and get the bot throttled.
 [*][B]Backoff on errors[/B] instead of a retry storm; the update offset survives restarts, so old messages are never replayed into the game.
+[*][B]Several servers on one bot[/B] — a hub/spoke bridge, so a survival world and a creative server report into the same chat, each line prefixed with its server name.
 [*][B]No third-party libraries[/B] — only the JDK and the Paper API.
 [/LIST]
 
@@ -56,10 +57,44 @@ TgRelay does it properly:
 [*]Minecraft → Telegram: chat, join, quit, deaths and advancements (each event can be disabled).
 [*]Telegram → Minecraft: messages are printed with tellraw, so they keep colours and are never attributed to a player.
 [*]Groups, channels and private chats; one bot can post to many destinations.
-[*]%player%, %message%, %sender% placeholders in every format string.
+[*]%player%, %message%, %sender%, %server% placeholders in every format string.
 [*]English, Russian and Chinese locale files, overridable without a rebuild.
 [*]/tgrelay status shows chats, queue, offset and the moderation route; /tgrelay reload re-reads the config.
 [/LIST]
+
+[B][SIZE=4]Two servers, one Telegram chat[/SIZE][/B]
+
+Telegram gives a bot exactly one getUpdates reader, so installing the plugin twice with the same token does not work — the two pollers steal messages from each other and one server's chat randomly disappears. The usual advice is "run a second bot", which is a second chat in every player's list.
+
+TgRelay instead makes one server the hub: it owns the bot, and every other server reports to it over loopback HTTP with a shared secret.
+
+[LIST]
+[*][B]hub[/B] — owns the token, polls Telegram, accepts lines from the other servers and pushes each Telegram message back to all of them;
+[*][B]spoke[/B] — no token of its own: sends its chat to the hub and prints what comes back;
+[*][B]standalone[/B] — the default, one server, nothing to configure.
+[/LIST]
+
+[CODE]
+# hub
+server: { name: "Losos" }
+relay:
+  mode: hub
+  token: "a-long-random-string"
+  bind: "127.0.0.1:8765"
+  spokes: ["http://127.0.0.1:8766"]
+format:
+  from-minecraft: "[%server%] %player%: %message%"
+
+# spoke
+server: { name: "Build" }
+relay:
+  mode: spoke
+  token: "a-long-random-string"
+  bind: "127.0.0.1:8766"
+  hub: "http://127.0.0.1:8765"
+[/CODE]
+
+Result: [FONT=Courier New][Losos] Steve: hi[/FONT] and [FONT=Courier New][Build] Alex: testing the roof[/FONT] in one chat. Muted players are still routed to the moderation channel by the hub, and /tgrelay status on each side shows the mode, the server name and the peer address.
 
 [B][SIZE=4]Privacy: players can mute themselves[/SIZE][/B]
 
@@ -133,7 +168,7 @@ The plugin is maintained in the open and shaped by the people who run it. If som
 
 **Summary:**
 ```
-Two-way Minecraft ↔ Telegram bridge for Paper: one long-poll connection, a rate-limited queue, and player self-mute.
+Two-way Minecraft ↔ Telegram bridge for Paper: one long-poll connection, a rate-limited queue, player self-mute, and several servers on one bot.
 ```
 
 **Body:** тот же текст, что на Hangar (`README`/страница проекта), картинки те же.
@@ -147,7 +182,8 @@ Two-way Minecraft ↔ Telegram bridge for Paper: one long-poll connection, a rat
 https://hangar.papermc.io/Stil00000/TgRelay
 
 Что внутри: одна long-poll сессия вместо тысяч сокетов, лимит на отправку,
-и /tgrelay off — можно убрать свои сообщения из общего чата, админы при этом всё видят.
+/tgrelay off — можно убрать свои сообщения из общего чата (админы при этом всё видят),
+и один бот на оба сервера: сообщения из тестового теперь тоже здесь, с префиксом [Build].
 
 Ставьте звёзды и присылайте идеи — плагин открытый.
 ```

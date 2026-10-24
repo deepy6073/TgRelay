@@ -36,6 +36,7 @@ TgRelay does it properly:
 * **one shared `java.net.http.HttpClient`** with a bounded pool, so connections are reused and closed;
 * **outbound queue** with a rate limit, so a chatty server cannot flood Telegram and get the bot throttled;
 * **backoff on errors** instead of a retry storm;
+* **several servers on one bot** — a hub/spoke bridge, so a second server reports into the same chat with its own prefix (below);
 * no third-party HTTP libraries — only the JDK and the server API.
 
 ## Install
@@ -52,6 +53,46 @@ bot:
 ```
 
 3. `/tgrelay reload`.
+
+## Several servers, one bot
+
+A survival world plus a creative build server is a normal setup — and one Telegram chat for both is what players usually want. It cannot be done by installing the plugin twice with the same token: Telegram gives a bot exactly one `getUpdates` reader, so two pollers steal messages from each other and one server's chat randomly disappears.
+
+TgRelay solves it with a hub. One server owns the bot; the rest talk to it over loopback HTTP with a shared secret, so no second token and no second bot in the chat:
+
+```
+                    ┌──────────────┐
+   Telegram  ◄─────►│ hub: Losos   │  owns the token, polls, posts
+                    └──────┬───────┘
+                           │ 127.0.0.1:8765 ⇄ 127.0.0.1:8766
+                    ┌──────┴───────┐
+                    │ spoke: Build │  no token, no polling
+                    └──────────────┘
+```
+
+```yaml
+# hub (the server that owns the bot)
+server: { name: "Losos" }
+relay:
+  mode: hub
+  token: "a-long-random-string"
+  bind: "127.0.0.1:8765"
+  spokes: ["http://127.0.0.1:8766"]
+format:
+  from-minecraft: "[%server%] %player%: %message%"
+```
+
+```yaml
+# spoke (any other server, same token)
+server: { name: "Build" }
+relay:
+  mode: spoke
+  token: "a-long-random-string"
+  bind: "127.0.0.1:8766"
+  hub: "http://127.0.0.1:8765"
+```
+
+Everything else is unchanged: `/tgrelay off`, `link`, `reload` and the moderation channel work on every server, and muted messages are routed by the hub. Full reference: **[docs/configuration.md](docs/configuration.md#relay--several-servers-one-bot)**.
 
 For a group, add the bot to the group first, otherwise Telegram answers
 `chat not found` — exactly the failure that made the old plugin spin.
@@ -118,7 +159,7 @@ events, polling, queue, delivery, self-mute and the moderation channel, plus rea
 No Gradle/Maven needed — the Paper server jar already contains the whole API:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1 -PaperJar "C:\path\to\paper-1.21.8.jar"
+powershell -ExecutionPolicy Bypass -File build.ps1 -ServerRoot "C:\path\to\server"
 ```
 
 Requires JDK 21+.

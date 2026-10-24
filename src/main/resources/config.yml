@@ -4,6 +4,39 @@
 # dropping plugins/TgRelay/lang/<code>.yml next to this file.
 language: en
 
+server:
+  # Name of THIS server. Put %server% into a format (see below) and every line
+  # carries it, so one Telegram chat can serve several servers at once.
+  # Example: name "Build" + from-minecraft "[%server%] %player%: %message%"
+  # gives "[Build] Alex: hello". Empty means "no name, no prefix".
+  name: ""
+
+# Several servers, one bot.
+#
+# Telegram lets a bot have exactly ONE getUpdates reader, so two servers polling the
+# same token steal each other's messages. That is what these modes are for:
+#
+#   standalone — own bot, polls Telegram itself (default, one server, nothing to do)
+#   hub        — owns the bot: posts its own chat, accepts lines from spokes and
+#                sends every Telegram message back to them
+#   spoke      — no bot of its own: sends its chat to the hub, prints what the hub
+#                sends back. bot.token and bot.chats are not used here.
+#
+# A spoke needs: relay.mode: spoke, the same relay.token as the hub, relay.hub pointing
+# at the hub and its own relay.bind. The hub lists its spokes in relay.spokes.
+relay:
+  mode: standalone
+  # Shared secret, at least a dozen random characters. Both sides must match.
+  token: ""
+  # Where the listener binds. Keep it on loopback unless the servers are on different
+  # machines — then it has to be reachable from the hub (and the secret is not optional).
+  bind: "127.0.0.1:8765"
+  # Hub only: every server that reports to this hub.
+  spokes:
+    - "http://127.0.0.1:8766"
+  # Spoke only: where the hub listens.
+  hub: "http://127.0.0.1:8765"
+
 bot:
   # Token from @BotFather.
   token: "PUT_BOT_TOKEN_HERE"
@@ -16,7 +49,8 @@ bot:
   listen: []
 
 format:
-  # Minecraft -> Telegram
+  # Minecraft -> Telegram. %server% expands to server.name (empty name -> empty text),
+  # %player% to the player, %message% to what they typed.
   from-minecraft: "%player%: %message%"
   # Telegram -> Minecraft (printed to the game via tellraw)
   to-minecraft: "[TG] %sender%: %message%"

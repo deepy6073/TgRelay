@@ -1,6 +1,6 @@
 # Configuration
 
-Everything lives in `plugins/TgRelay/config.yml`. After editing, run `/tgrelay reload` — no restart needed.
+Everything lives in `plugins/TgRelay/config.yml`. After editing, run `/tgrelay reload` — no restart needed, except for the bridge keys listed in [`relay`](#relay--several-servers-one-bot).
 
 The file is created on first start from the defaults baked into the jar. Unknown keys are ignored; missing keys fall back to the defaults listed below.
 
@@ -15,6 +15,29 @@ language: en
 Interface language for everything the plugin prints: `en`, `ru`, `zh`. Bundled in the jar; override a single locale by dropping your own `plugins/TgRelay/lang/<code>.yml` next to the config.
 
 ---
+
+## `server`
+
+```yaml
+server:
+  name: ""
+```
+
+The name of *this* server. It does nothing on its own: it is the value that `%server%` expands to in the formats below, so one Telegram chat can tell several servers apart.
+
+```yaml
+server:
+  name: "Build"
+format:
+  from-minecraft: "[%server%] %player%: %message%"
+```
+
+```
+[Losos] Steve: hi there
+[Build] Alex: testing the roof
+```
+
+An empty name removes the placeholder's text entirely — that is the single-server default.
 
 ## `bot`
 
@@ -34,7 +57,54 @@ bot:
 | `chats` | Where Minecraft events are posted. One entry per destination, any mix of private chats, groups and channels. |
 | `listen` | Which chats are read for Telegram → Minecraft. Empty means "the same as `chats`". Point it at a group id and the sender is taken from the message author, so group messages keep real names. |
 
-**One bot, one consumer.** Telegram allows a single `getUpdates` reader per bot. If another plugin (for example TelegramChat) polls the same token, both will misbehave.
+**One bot, one consumer.** Telegram allows a single `getUpdates` reader per bot. If another plugin (for example TelegramChat) polls the same token, both will misbehave. Several *servers* on one bot are handled by `relay`, below.
+
+---
+
+## `relay` — several servers, one bot
+
+```yaml
+relay:
+  mode: standalone          # standalone | hub | spoke
+  token: ""                 # shared secret, the same on every server
+  bind: "127.0.0.1:8765"    # where this server listens for the other side
+  spokes:                   # hub only: every server that reports here
+    - "http://127.0.0.1:8766"
+  hub: "http://127.0.0.1:8765"   # spoke only: where the hub listens
+```
+
+Two Minecraft servers cannot both poll the same bot: `getUpdates` has exactly one consumer, so they would steal messages from each other — one server's chat appears, the other's silently disappears into whichever poller grabbed the update first. Instead, one server owns the bot and the rest talk to it over HTTP:
+
+```
+                    ┌──────────────┐
+   Telegram  ◄─────►│ hub: Losos   │  owns the token, polls, posts
+                    └──────┬───────┘
+                           │ 127.0.0.1:8765 ⇄ 127.0.0.1:8766
+                    ┌──────┴───────┐
+                    │ spoke: Build │  no token, no polling
+                    └──────────────┘
+```
+
+| Mode | What it does |
+|---|---|
+| `standalone` | Default. Own bot, own polling. One server, nothing to configure. |
+| `hub` | Owns the bot: posts its own chat, accepts lines from every spoke, and sends each Telegram message back to all of them. Needs `bot.token`, `bot.chats` and `relay.spokes`. |
+| `spoke` | No bot of its own. Sends its chat to `relay.hub` and prints what the hub pushes back. Needs only `relay.hub`, `relay.token` and its own `relay.bind`; `bot.token` and `bot.chats` are unused and may be empty. |
+
+| Key | Meaning |
+|---|---|
+| `mode` | `standalone`, `hub` or `spoke`. |
+| `token` | Shared secret, at least a dozen random characters, identical on the hub and on every spoke. A request with a different token is answered `401` and never reaches the chat. Required in `hub` and `spoke` modes — the plugin refuses to start without it. |
+| `bind` | Where the listener binds. `127.0.0.1:8765` on the hub, its own port on each spoke. Keep it on loopback when the servers are on one machine; if they are not, the address has to be reachable from the hub — and the secret stops being optional politeness. |
+| `spokes` | Hub only: the list of spoke addresses. A hub with an empty list still works, it just has nobody to talk to. |
+| `hub` | Spoke only: the hub address. |
+
+Behaviour worth knowing:
+
+* **Prefixes come from `server.name`** — every server formats its own lines, including its name, before they leave it. The hub is a pipe for those lines and does not add anything of its own.
+* **Muted messages stay moderated.** A player who ran `/tgrelay off` on a spoke is routed by the hub, using the hub's `moderation.chat` and its `ops.json` links — the spoke does not need a copy of that configuration.
+* **Nothing is lost silently.** If the hub is unreachable, a spoke retries three times and then writes the line to its own console log. If a spoke is down, the hub logs it once every five minutes instead of flooding the log.
+* **Reload limits.** `server.name`, `relay.*` and `bot.token` are read once, when the bridge starts: changing them needs a server restart, and `/tgrelay reload` says so in the console. Everything else reloads live.
 
 ---
 
@@ -51,6 +121,9 @@ format:
 | `%player%` | player name | — |
 | `%message%` | chat text | message text |
 | `%sender%` | — | Telegram display name (or `@username`) |
+| `%server%` | `server.name` | `server.name` |
+
+`%server%` also works in `events.*-format` and in `mute.prefix`. With an empty `server.name` it expands to nothing, so a single-server setup never sees a stray empty bracket.
 
 Messages going into the game are printed with `tellraw`, so colours in the template work (`&a`, `&7`, …) and nothing is attributed to a player.
 
@@ -222,3 +295,38 @@ bot:
 ```
 
 Note: `chats` cannot be empty; if you only need the moderation DMs, put the admin chat id there.
+
+**Two servers, one Telegram chat**
+
+On the server that owns the bot (`Losos`, port 25565):
+
+```yaml
+server:
+  name: "Losos"
+relay:
+  mode: hub
+  token: "a-long-random-string"
+  bind: "127.0.0.1:8765"
+  spokes:
+    - "http://127.0.0.1:8766"
+format:
+  from-minecraft: "[%server%] %player%: %message%"
+  join-format: "[%server%] %player% joined the game"
+```
+
+On the second server (`Build`, port 25566):
+
+```yaml
+server:
+  name: "Build"
+relay:
+  mode: spoke
+  token: "a-long-random-string"        # exactly the same secret
+  bind: "127.0.0.1:8766"
+  hub: "http://127.0.0.1:8765"
+format:
+  from-minecraft: "[%server%] %player%: %message%"
+  join-format: "[%server%] %player% joined the game"
+```
+
+Both servers restart once. From then on a Telegram message lands in both game chats, and a line typed on either server reaches the same Telegram chat with its server name in front. `/tgrelay status` on each side shows the mode, the name and the peer address.
