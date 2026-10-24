@@ -10,8 +10,8 @@
         powershell -ExecutionPolicy Bypass -File build.ps1 -ServerRoot "C:\MCServer"
 #>
 param(
-    [string]$ServerRoot = 'C:\build.losos.world',
-    [string]$OutJar = 'C:\build.losos.world\_diag\TgRelay.jar'
+    [string]$ServerRoot = 'C:\MCServer',
+    [string]$OutJar = 'C:\losos-infra\_diag\TgRelay.jar'
 )
 
 $ErrorActionPreference = 'Stop'
