@@ -32,7 +32,7 @@ Two-way Telegram bridge: long polling, a rate-limited queue, player self-mute, s
 
 Paper plugin that connects your server chat to a Telegram group, channel or DM — and does it without leaking a network socket every second.
 
-It was written for [URL=https://map.losos.world/]Losos World[/URL], a survival server running since 2014, after the classic TelegramChat plugin pushed the machine into "No buffer space available" with thousands of leaked connections.
+It was written for [URL=https://map.losos.world/]Losos World[/URL], a survival server running since 2014, after the classic [URL=https://github.com/mastercake10/TelegramChat]TelegramChat[/URL] plugin ([URL=https://www.spigotmc.org/resources/telegramchat.16576/]SpigotMC page[/URL]) pushed the machine into "No buffer space available" with thousands of leaked connections.
 
 [B][SIZE=4]Why another Telegram bridge?[/SIZE][/B]
 
@@ -156,7 +156,7 @@ The plugin is maintained in the open and shaped by the people who run it. If som
 
 [LIST]
 [*]Source code and releases: [URL=https://github.com/deepy6073/TgRelay]github.com/deepy6073/TgRelay[/URL]
-[*]Hangar: [URL=https://hangar.papermc.io/Stil00000/TgRelay]hangar.papermc.io/Stil00000/TgRelay[/URL]
+[*]Prior art: [URL=https://github.com/mastercake10/TelegramChat]TelegramChat[/URL] ([URL=https://www.spigotmc.org/resources/telegramchat.16576/]SpigotMC page[/URL]) — the plugin this one was written to replace
 [*]License: MIT
 [*]Built for [URL=https://losos.world/]Losos World[/URL] — a no-wipe survival server since 2014 ([URL=https://map.losos.world/]live map[/URL])
 [/LIST]
