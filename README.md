@@ -107,6 +107,12 @@ The plugin also imports the `linkedChats` map from an old `plugins/TelegramChat/
 on first start — but only for players that are operators, and only if `linked.txt` is empty.
 Nothing else from the old plugin is read.
 
+## Configuration
+
+Every key in `plugins/TgRelay/config.yml` is documented in
+**[docs/configuration.md](docs/configuration.md)** — bot token and destinations, formats,
+events, polling, queue, delivery, self-mute and the moderation channel, plus ready-made recipes.
+
 ## Build
 
 No Gradle/Maven needed — the Paper server jar already contains the whole API:
