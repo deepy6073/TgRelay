@@ -47,7 +47,7 @@ public final class TgRelay extends JavaPlugin {
     private static final class Outgoing {
         final String text;
         final List<String> targets;
-        /** Заглушённое сообщение: узел-ступица отправит его в канал модерации, а не в общий чат. */
+        /** Заглушённое сообщение: главный сервер отправит его в канал модерации, а не в общий чат. */
         final boolean muted;
 
         Outgoing(String text, List<String> targets, boolean muted) {
@@ -72,9 +72,9 @@ public final class TgRelay extends JavaPlugin {
 
     /** Один сервер и свой бот — как было до 1.3.0. */
     static final String MODE_STANDALONE = "standalone";
-    /** Бот живёт здесь: свой чат плюс чат серверов-сателлитов. */
+    /** Бот живёт здесь: свой чат плюс чаты вторых серверов. */
     static final String MODE_HUB = "hub";
-    /** Бота нет: чат уходит на ступицу, её сообщения печатаются здесь. */
+    /** Бота нет: чат уходит на главный сервер, его сообщения печатаются здесь. */
     static final String MODE_SPOKE = "spoke";
 
     /** В игре никого: ответить в тот же чат, откуда пришло сообщение (по умолчанию). */
@@ -190,7 +190,7 @@ public final class TgRelay extends JavaPlugin {
         }
     }
 
-    /** Поднимает HTTP-мост: ступица слушает сателлиты, сателлит слушает ступицу. */
+    /** Поднимает HTTP-мост: главный сервер слушает вторые, второй слушает главного. */
     private void startBridge() {
         if (MODE_STANDALONE.equals(relayMode)) {
             return;
@@ -204,8 +204,8 @@ public final class TgRelay extends JavaPlugin {
 
                     @Override
                     public void onInbound(String text) {
-                        // сателлит не знает исходный чат: эхо — забота ступицы
-                        showInGame(text, null);
+                        // копия от главного сервера: показываем, только если есть кому
+                        showInGame(text, false);
                     }
                 });
         bridgeSignature = bridgeSignature();
@@ -608,7 +608,7 @@ public final class TgRelay extends JavaPlugin {
     private void relayMuted(String line) {
         String text = mutePrefix + line;
         if (isSpoke()) {
-            // куда именно — решает ступица: у неё канал модерации и привязки админов
+            // куда именно — решает главный сервер: у него канал модерации и привязки админов
             enqueueMuted(text);
             return;
         }
@@ -620,7 +620,7 @@ public final class TgRelay extends JavaPlugin {
         enqueueTo(targets, text);
     }
 
-    /** Ступица: строка от сателлита. Заглушённые уходят в канал модерации, не в общий чат. */
+    /** Главный сервер: строка от второго сервера. Заглушённые уходят в модерацию, не в общий чат. */
     private void acceptFromSpoke(String text, boolean muted) {
         if (!muted) {
             enqueue(text);
@@ -651,7 +651,7 @@ public final class TgRelay extends JavaPlugin {
         enqueueInternal(targets, text, false);
     }
 
-    /** Сателлит: пометить строку как заглушённую — ступица сама выберет адресата. */
+    /** Второй сервер: пометить строку как заглушённую — адресата выбирает главный. */
     private void enqueueMuted(String text) {
         enqueueInternal(null, text, true);
     }
@@ -708,7 +708,7 @@ public final class TgRelay extends JavaPlugin {
         }
     }
 
-    /** Сателлит: отдать строку ступице. Три попытки, потом честно ругаемся в лог. */
+    /** Второй сервер: отдать строку главному. Три попытки, потом честно ругаемся в лог. */
     private void sendToHub(Outgoing item) {
         if (bridge == null) {
             log(messages.get("hub-unreachable", relayHub, "bridge is not running"));
@@ -755,9 +755,9 @@ public final class TgRelay extends JavaPlugin {
                             .replace("%sender%", update.sender)
                             .replace("%message%", update.text));
                     if (isHub() && bridge != null) {
-                        bridge.pushInbound(line);   // то же сообщение — в чат сателлитов
+                        bridge.pushInbound(line);   // то же сообщение — на вторые серверы
                     }
-                    showInGame(line, update.chatId);
+                    showInGame(line, true);
                 }
                 if (highest != offset.get()) {
                     offset.set(highest);
@@ -779,27 +779,37 @@ public final class TgRelay extends JavaPlugin {
     }
 
     /**
-     * Печатает строку из Telegram в игре. Общая точка для своего бота и для ступицы.
+     * Печатает строку из Telegram в игре. Общая точка для своего бота и для главного сервера.
      *
-     * В игре никого — работает {@code delivery.when-empty}:
-     * {@code echo} отвечает в тот же чат (по умолчанию) и всё равно придерживает строку,
+     * В игре никого — работает {@code delivery.when-empty}: {@code echo} (по умолчанию)
+     * отдаёт строку в общий фид бота и всё равно придерживает её до входа игрока,
      * {@code hold} молча придерживает, {@code drop} выбрасывает.
      *
-     * @param sourceChat чат, откуда пришло сообщение — туда уходит эхо; null, если его нет
+     * Второй сервер ничего не придерживает: он получает копию уже обработанного главным
+     * сообщения, и копить её значит показать случайному игроку чужую переписку.
+     *
+     * @param direct true — строка пришла прямо из Telegram (свой бот или главный сервер),
+     *               false — её прислал главный сервер
      */
-    private void showInGame(String line, String sourceChat) {
+    private void showInGame(String line, boolean direct) {
         String command = "tellraw @a " + jsonText(line);
         getServer().getScheduler().runTask(this, () -> {
             if (!getServer().getOnlinePlayers().isEmpty()) {
                 getServer().dispatchCommand(getServer().getConsoleSender(), command);
                 return;
             }
+            if (!direct) {
+                log(messages.get("dropped", line));
+                return;
+            }
             if (WHEN_DROP.equals(whenEmpty)) {
                 log(messages.get("dropped", line));
                 return;
             }
-            if (WHEN_ECHO.equals(whenEmpty) && sourceChat != null && !sourceChat.isBlank()) {
-                enqueueTo(List.of(sourceChat), line + echoSuffix);
+            if (WHEN_ECHO.equals(whenEmpty)) {
+                // в общий фид, а не только автору: иначе никто, кроме него, не узнает,
+                // что сообщение не дошло до игры
+                enqueue(line + echoSuffix);
                 log(messages.get("echoed", line));
             }
             hold(line);
@@ -1005,7 +1015,7 @@ public final class TgRelay extends JavaPlugin {
         return true;
     }
 
-    /** С кем этот сервер разговаривает: адрес моста и число сателлитов. */
+    /** С кем этот сервер разговаривает: адрес моста и число вторых серверов. */
     private String bridgeWhere() {
         if (isSpoke()) {
             return relayHub;

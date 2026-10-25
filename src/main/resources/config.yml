@@ -100,10 +100,12 @@ moderation:
 
 delivery:
   # What to do with a Telegram message when nobody is in game:
-  #   echo — answer in the same chat it came from, then show it in the game as
-  #          soon as someone joins (default: the writer is not left guessing)
+  #   echo — post it into bot.chats with echo-suffix attached, then show it in the
+  #          game as soon as someone joins (default: nothing disappears and
+  #          everyone in the feed sees that the message is waiting)
   #   hold — say nothing, only show it when someone joins
   #   drop — ignore it completely
+  # A spoke never buffers what the hub sends: that copy is already handled.
   when-empty: echo
   # Appended to the echoed copy, so a silent-looking chat never happens.
   echo-suffix: " (nobody in game — waiting for a player to join)"

@@ -188,9 +188,13 @@ at 3 a.m. should not be left guessing whether anyone read it.
 
 | `when-empty` | What happens |
 |---|---|
-| `echo` (default) | The bot answers **in the same chat the message came from**, with `echo-suffix` appended, and the line is still held for the game — so it is both acknowledged now and shown when someone joins. |
+| `echo` (default) | The line is posted into `bot.chats` — the normal feed — with `echo-suffix` appended, and it is still held for the game, so it is both visible now and shown when someone joins. Everyone in the feed sees that the message is waiting, not only its author. |
 | `hold` | Silence: the line only appears in the game when the first player joins. |
 | `drop` | The line is thrown away and written to the console log. |
+
+A **spoke** never buffers what the hub sends it: that copy is already handled, and the spoke
+does not know whether the hub showed it. If nobody is online there, the line is logged as
+dropped instead of being replayed to whoever joins next.
 
 | Key | Meaning |
 |---|---|
