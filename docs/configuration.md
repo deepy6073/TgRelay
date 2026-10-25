@@ -260,8 +260,9 @@ On first start the plugin imports `linkedChats` from an old `plugins/TelegramCha
 | `plugins/TgRelay/state.json` | `{"offset": …}` — the update offset. It is what stops a restart from replaying old Telegram messages into the game. Delete it to start over (the backlog will be replayed). |
 | `plugins/TgRelay/muted.txt` | UUIDs of players who muted themselves. |
 | `plugins/TgRelay/linked.txt` | `<telegram id> <uuid>` pairs. |
+| `plugins/TgRelay/disabled-chats.txt` | Chats the plugin stopped writing to because Telegram said the bot is blocked or the chat is gone. They stay out of `bot.chats` across restarts; delete a line and run `/tgrelay reload` to try again. |
 
-All three are plain text — safe to edit by hand while the server is stopped.
+All of them are plain text — safe to edit by hand; the two chat lists are re-read by `/tgrelay reload`.
 
 ---
 

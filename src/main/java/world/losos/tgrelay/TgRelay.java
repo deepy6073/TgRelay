@@ -96,6 +96,8 @@ public final class TgRelay extends JavaPlugin {
     private String echoSuffix = "";
     private int holdMaxMinutes;
     private int holdMaxMessages;
+    /** Чаты, где бот заблокирован или чат удалён: помним между рестартами. */
+    private final Set<String> disabledChats = ConcurrentHashMap.newKeySet();
 
     private TelegramApi api;
     private Bridge bridge;
@@ -250,6 +252,52 @@ public final class TgRelay extends JavaPlugin {
             getServer().dispatchCommand(getServer().getConsoleSender(), "tellraw @a " + jsonText(line));
         }
         log(messages.get("flushed", lines.size()));
+    }
+
+    /** Файл с чатами, куда бот больше не пишет: их выкинул сам Telegram. */
+    private Path disabledChatsFile() {
+        return getDataFolder().toPath().resolve("disabled-chats.txt");
+    }
+
+    private void loadDisabledChats() {
+        disabledChats.clear();
+        Path file = disabledChatsFile();
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        try {
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                disabledChats.add(trimmed);
+            }
+        } catch (IOException error) {
+            log("не смог прочитать disabled-chats.txt: " + error);
+        }
+    }
+
+    private void saveDisabledChats() {
+        Path file = disabledChatsFile();
+        try {
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            List<String> lines = new ArrayList<>();
+            lines.add("# Чаты, в которых бот заблокирован или которые удалены.");
+            lines.add("# Плагин перестал в них писать. Вернуть: удалить строку и /tgrelay reload.");
+            disabledChats.stream().sorted().forEach(lines::add);
+            Files.write(file, lines, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            log("не смог записать disabled-chats.txt: " + error);
+        }
+    }
+
+    /** Сколько чатов сейчас отключено — для /tgrelay status. */
+    int disabledChatsCount() {
+        return disabledChats.size();
     }
 
     private long loadOffset() {
@@ -441,8 +489,23 @@ public final class TgRelay extends JavaPlugin {
             return false;
         }
 
+        loadDisabledChats();
         chats.clear();
-        chats.addAll(config.getStringList("bot.chats"));
+        int skipped = 0;
+        for (String id : config.getStringList("bot.chats")) {
+            String trimmed = text(id);
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (disabledChats.contains(trimmed)) {
+                skipped++;
+                continue;
+            }
+            chats.add(trimmed);
+        }
+        if (skipped > 0) {
+            getLogger().info(messages.get("chats-skipped", skipped));
+        }
         listenChats = new java.util.ArrayList<>(config.getStringList("bot.listen"));
         if (listenChats.isEmpty()) {
             listenChats = chats;   // по умолчанию читаем оттуда же, куда пишем
@@ -626,6 +689,8 @@ public final class TgRelay extends JavaPlugin {
                         // пользователь заблокировал бота или чат удалён — убираем насовсем,
                         // иначе каждый чих в игре бьётся в эти двери
                         if (item.targets == null && chats.remove(chat)) {
+                            disabledChats.add(chat);
+                            saveDisabledChats();
                             log(messages.get("chat-disabled", chat));
                         } else if (item.targets != null) {
                             log(messages.get("admin-unreachable", chat));
@@ -934,6 +999,9 @@ public final class TgRelay extends JavaPlugin {
         sender.sendMessage(Component.text(messages.get("status-mode",
                 relayMode, serverName.isEmpty() ? "-" : serverName, bridgeWhere())));
         sender.sendMessage(Component.text(messages.get("moderation-status", moderationWhere())));
+        if (disabledChatsCount() > 0) {
+            sender.sendMessage(Component.text(messages.get("disabled-status", disabledChatsCount())));
+        }
         return true;
     }
 
