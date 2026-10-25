@@ -83,3 +83,4 @@ disabled-status: "disabled chats: %d — the bot is blocked or the chat was dele
 shown: "shown in game: %s"
 shown-elsewhere: "shown on another server (%s), nobody is here: %s"
 spoke-copy-dropped: "copy from the hub: nobody is online here, nothing to show -> %s"
+mirrored: "copied into the bot chats -> %s"

@@ -786,52 +786,39 @@ public final class TgRelay extends JavaPlugin {
     }
 
     /**
-     * Печатает строку из Telegram в игре. Общая точка для своего бота и для главного сервера.
+     * Принимает строку из Telegram. Две вещи делаются независимо:
      *
      * <ol>
-     *   <li>есть игроки здесь — печатаем им;</li>
-     *   <li>здесь пусто, но кто-то есть на втором сервере — он это и покажет, бот молчит;</li>
-     *   <li>пусто везде — по {@code delivery.when-empty}: {@code echo} сразу отдаёт сообщение
-     *       в чаты бота (кроме чата автора) и ничего не копит, {@code hold} копит молча,
-     *       {@code drop} выбрасывает;</li>
-     *   <li>второй сервер копию от главного не копит и автору не отвечает.</li>
+     *   <li><b>зеркало в фид</b> — сообщение всегда уходит в чаты бота (кроме чата автора),
+     *       чтобы человек, которого нет в игре, видел всё в Telegram;</li>
+     *   <li><b>показ в игре</b> — если есть кому показать, печатаем игрокам; если никого
+     *       нет, работает {@code delivery.when-empty}: {@code hold} копит до входа игрока,
+     *       {@code echo}/{@code drop} не копят.</li>
      * </ol>
+     *
+     * Второй сервер копию от главного не зеркалит и в буфер не кладёт: её уже обработал
+     * главный сервер.
      *
      * @param sourceChat чат, откуда пришло сообщение; null — копия от главного сервера
      */
     private void showInGame(String line, String sourceChat) {
+        boolean direct = sourceChat != null && !sourceChat.isBlank();
+
+        if (direct) {
+            List<String> targets = new ArrayList<>(chats);
+            targets.remove(sourceChat);    // автору своё же сообщение не дублируем
+            if (!targets.isEmpty()) {
+                enqueueTo(targets, line);
+                log(messages.get("mirrored", line));
+            }
+        }
+
         if (!getServer().getOnlinePlayers().isEmpty()) {
             deliverToGame(line);
             return;
         }
-
-        String busyElsewhere = null;
-        if (bridge != null && isHub()) {
-            for (Bridge.Peer peer : bridge.peers()) {
-                if (peer.players > 0) {
-                    busyElsewhere = peer.name;
-                    break;
-                }
-            }
-        }
-        if (busyElsewhere != null) {
-            log(messages.get("shown-elsewhere", busyElsewhere, line));
-            return;
-        }
-
-        if (sourceChat == null || sourceChat.isBlank()) {
+        if (!direct) {
             log(messages.get("spoke-copy-dropped", line));
-            return;
-        }
-        if (WHEN_ECHO.equals(whenEmpty)) {
-            List<String> targets = new ArrayList<>(chats);
-            targets.remove(sourceChat);    // автору своё же сообщение не дублируем
-            if (targets.isEmpty()) {
-                log(messages.get("dropped", line));
-                return;
-            }
-            enqueueTo(targets, line);
-            log(messages.get("echoed", line));
             return;
         }
         if (WHEN_HOLD.equals(whenEmpty)) {

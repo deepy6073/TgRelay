@@ -172,9 +172,9 @@ Requires JDK 21+.
 * Only chats listed in `bot.chats` are accepted for the Telegram → Minecraft direction.
 * Muted players are muted in the *outbound* direction only — their messages still appear in the
   game chat for everyone, they just do not reach the public Telegram chats.
-* Nobody online: the message is posted into the bot chats right away (`delivery.when-empty: echo`)
-  instead of waiting for a player who may never come. `hold` keeps the old behaviour — silence
-  and a buffer until someone joins; `drop` throws it away.
+* Every Telegram message is copied into the bot chats (except the chat it came from), so you see
+  the conversation in Telegram even when you are not in game. `delivery.when-empty` only decides
+  whether the in-game copy waits for the first player (`hold`) or not (default `echo`).
 
 ## Related
 

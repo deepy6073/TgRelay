@@ -83,3 +83,4 @@ disabled-status: "已停用会话：%d 个 — 机器人被屏蔽或会话已删
 shown: "已在游戏内显示：%s"
 shown-elsewhere: "已在另一台服务器（%s）显示，本服无人：%s"
 spoke-copy-dropped: "来自中心服务器的副本：本服无人，无需显示 -> %s"
+mirrored: "已同步到机器人会话 -> %s"

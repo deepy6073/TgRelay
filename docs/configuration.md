@@ -185,15 +185,19 @@ delivery:
 What happens to a Telegram message when nobody is online. A player who writes to the bot
 at 3 a.m. should not be left guessing whether anyone read it.
 
-| `when-empty` | What happens |
-|---|---|
-| `echo` (default) | The message is posted into `bot.chats` **immediately**, skipping the chat it came from, and nothing is kept for later. The game chat has nobody to show it to, so the bot feed is where it lands — no waiting, no buffer that might expire. |
-| `hold` | Silence: nothing goes to the bot, the line only appears in the game when the first player joins. |
-| `drop` | The line is thrown away and written to the console log. |
+Two separate things happen to every Telegram message, and only the second one is configurable:
 
-The two modes are deliberately exclusive: `echo` means "show it now, somewhere", `hold` means
-"keep it for the game and stay quiet". Earlier versions tried to do both at once and the result
-was a notice for the author plus a buffer nobody could predict.
+1. **It is always copied into `bot.chats`** (every chat except the one it came from). That is the
+   point of the bridge: someone who is not in game still sees the conversation in Telegram.
+2. **The in-game copy** follows `delivery.when-empty` when nobody is online:
+
+| `when-empty` | In-game copy |
+|---|---|
+| `echo` (default) | nothing waits — there is nobody to show it to, and the feed already has the message |
+| `hold` | the line is buffered and printed when the first player joins |
+| `drop` | nothing waits, and the console says the line was skipped |
+
+If a player *is* online, the message is printed in game as usual, and the feed copy is still made.
 
 A **spoke** never buffers what the hub sends it: that copy is already handled, and the spoke
 does not know whether the hub showed it. If nobody is online there, the line is logged as
