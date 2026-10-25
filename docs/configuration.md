@@ -178,7 +178,6 @@ Outbound rate limit (clamped to 1–20). Telegram tolerates about 30 messages pe
 ```yaml
 delivery:
   when-empty: echo
-  echo-suffix: " (nobody in game — waiting for a player to join)"
   hold-max-minutes: 10
   hold-max-messages: 20
 ```
@@ -188,7 +187,7 @@ at 3 a.m. should not be left guessing whether anyone read it.
 
 | `when-empty` | What happens |
 |---|---|
-| `echo` (default) | The line is posted into `bot.chats` — the normal feed — with `echo-suffix` appended, and it is still held for the game, so it is both visible now and shown when someone joins. Everyone in the feed sees that the message is waiting, not only its author. |
+| `echo` (default) | The author gets one short line in the chat they wrote from — "nobody is in game right now, I will show your message as soon as someone joins" — and the message is held for the game. The reply never repeats the message and never goes to other chats: broadcasting it would expose the author's `@username` and the text of a private message to everyone in the feed. |
 | `hold` | Silence: the line only appears in the game when the first player joins. |
 | `drop` | The line is thrown away and written to the console log. |
 
@@ -199,7 +198,6 @@ dropped instead of being replayed to whoever joins next.
 | Key | Meaning |
 |---|---|
 | `when-empty` | `echo`, `hold` or `drop` — see above. |
-| `echo-suffix` | Text appended to the echoed copy. Empty string disables the suffix. |
 | `hold-max-minutes` | How long a held message stays valid. |
 | `hold-max-messages` | How many held messages are kept at most (oldest are dropped first). |
 

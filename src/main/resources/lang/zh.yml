@@ -80,3 +80,4 @@ moderation-test-sent-hub: "TgRelay：测试屏蔽消息已通过中心节点发�
 echoed: "游戏内无人 — 已回复到原会话，消息将暂存到有人进入 -> %s"
 chats-skipped: "已跳过 %d 个会话：机器人被屏蔽或会话已删除（disabled-chats.txt）"
 disabled-status: "已停用会话：%d 个 — 机器人被屏蔽或会话已删除（disabled-chats.txt）"
+empty-notice: "目前游戏内无人 — 有玩家进入后我会转达你的消息。"

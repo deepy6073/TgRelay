@@ -93,7 +93,6 @@ public final class TgRelay extends JavaPlugin {
     private final java.util.Deque<String> pendingLines = new java.util.ArrayDeque<>();
     /** Что делать с сообщением из Telegram, когда в игре никого: echo, hold или drop. */
     private String whenEmpty = WHEN_ECHO;
-    private String echoSuffix = "";
     private int holdMaxMinutes;
     private int holdMaxMessages;
     /** Чаты, где бот заблокирован или чат удалён: помним между рестартами. */
@@ -205,7 +204,7 @@ public final class TgRelay extends JavaPlugin {
                     @Override
                     public void onInbound(String text) {
                         // копия от главного сервера: показываем, только если есть кому
-                        showInGame(text, false);
+                        showInGame(text, null);
                     }
                 });
         bridgeSignature = bridgeSignature();
@@ -525,11 +524,6 @@ public final class TgRelay extends JavaPlugin {
             // обратная совместимость: старый булев ключ, true = держать, false = выбросить
             whenEmpty = config.getBoolean("delivery.hold-when-empty", true) ? WHEN_HOLD : WHEN_DROP;
         }
-        echoSuffix = config.getString("delivery.echo-suffix",
-                " (nobody in game — waiting for a player to join)");
-        if (echoSuffix == null) {
-            echoSuffix = "";
-        }
         holdMaxMinutes = Math.max(1, config.getInt("delivery.hold-max-minutes", 10));
         holdMaxMessages = Math.max(1, config.getInt("delivery.hold-max-messages", 20));
 
@@ -757,7 +751,7 @@ public final class TgRelay extends JavaPlugin {
                     if (isHub() && bridge != null) {
                         bridge.pushInbound(line);   // то же сообщение — на вторые серверы
                     }
-                    showInGame(line, true);
+                    showInGame(line, update.chatId);
                 }
                 if (highest != offset.get()) {
                     offset.set(highest);
@@ -782,23 +776,25 @@ public final class TgRelay extends JavaPlugin {
      * Печатает строку из Telegram в игре. Общая точка для своего бота и для главного сервера.
      *
      * В игре никого — работает {@code delivery.when-empty}: {@code echo} (по умолчанию)
-     * отдаёт строку в общий фид бота и всё равно придерживает её до входа игрока,
-     * {@code hold} молча придерживает, {@code drop} выбрасывает.
+     * отвечает автору короткой строкой «покажу, когда кто-то зайдёт» и придерживает
+     * сообщение до входа игрока, {@code hold} молча придерживает, {@code drop} выбрасывает.
+     *
+     * Ответ уходит только в тот чат, откуда пришло сообщение, и не повторяет его текст:
+     * рассылка в общий фид раскрывала бы ник автора и содержание его личных сообщений.
      *
      * Второй сервер ничего не придерживает: он получает копию уже обработанного главным
      * сообщения, и копить её значит показать случайному игроку чужую переписку.
      *
-     * @param direct true — строка пришла прямо из Telegram (свой бот или главный сервер),
-     *               false — её прислал главный сервер
+     * @param sourceChat чат, откуда пришло сообщение; null — копия от главного сервера
      */
-    private void showInGame(String line, boolean direct) {
+    private void showInGame(String line, String sourceChat) {
         String command = "tellraw @a " + jsonText(line);
         getServer().getScheduler().runTask(this, () -> {
             if (!getServer().getOnlinePlayers().isEmpty()) {
                 getServer().dispatchCommand(getServer().getConsoleSender(), command);
                 return;
             }
-            if (!direct) {
+            if (sourceChat == null || sourceChat.isBlank()) {
                 log(messages.get("dropped", line));
                 return;
             }
@@ -807,9 +803,7 @@ public final class TgRelay extends JavaPlugin {
                 return;
             }
             if (WHEN_ECHO.equals(whenEmpty)) {
-                // в общий фид, а не только автору: иначе никто, кроме него, не узнает,
-                // что сообщение не дошло до игры
-                enqueue(line + echoSuffix);
+                enqueueTo(List.of(sourceChat), messages.get("empty-notice"));
                 log(messages.get("echoed", line));
             }
             hold(line);
