@@ -78,12 +78,10 @@ public final class TgRelay extends JavaPlugin {
     /** Бота нет: чат уходит на главный сервер, его сообщения печатаются здесь. */
     static final String MODE_SPOKE = "spoke";
 
-    /** В игре никого: ответить в тот же чат, откуда пришло сообщение (по умолчанию). */
-    static final String WHEN_ECHO = "echo";
-    /** В игре никого: молча придержать до первого входа. */
-    static final String WHEN_HOLD = "hold";
-    /** В игре никого: выбросить. */
-    static final String WHEN_DROP = "drop";
+    /** В игре никого: не копить — сообщение уже разошлось по чатам бота (по умолчанию). */
+    static final String WHEN_SKIP = "skip";
+    /** В игре никого: придержать и показать, когда кто-то зайдёт. */
+    static final String WHEN_WAIT = "wait";
 
     private static TgRelay instance;
 
@@ -93,7 +91,7 @@ public final class TgRelay extends JavaPlugin {
     private final java.util.Deque<long[]> pendingTimes = new java.util.ArrayDeque<>();
     private final java.util.Deque<String> pendingLines = new java.util.ArrayDeque<>();
     /** Что делать с сообщением из Telegram, когда в игре никого: echo, hold или drop. */
-    private String whenEmpty = WHEN_ECHO;
+    private String whenEmpty = WHEN_SKIP;
     private int holdMaxMinutes;
     private int holdMaxMessages;
     /** Чаты, где бот заблокирован или чат удалён: помним между рестартами. */
@@ -108,6 +106,8 @@ public final class TgRelay extends JavaPlugin {
 
     private final List<String> chats = new java.util.concurrent.CopyOnWriteArrayList<>();
     private List<String> listenChats;
+    /** Сколько чатов прописано в конфиге — чтобы status показывал «13 из 24». */
+    private int configuredChats;
     private String formatFromMc;
     private String formatToMc;
     private int pollTimeout;
@@ -501,6 +501,7 @@ public final class TgRelay extends JavaPlugin {
             return false;
         }
 
+        configuredChats = config.getStringList("bot.chats").size();
         loadDisabledChats();
         chats.clear();
         int skipped = 0;
@@ -520,7 +521,15 @@ public final class TgRelay extends JavaPlugin {
         }
         listenChats = new java.util.ArrayList<>(config.getStringList("bot.listen"));
         if (listenChats.isEmpty()) {
-            listenChats = chats;   // по умолчанию читаем оттуда же, куда пишем
+            // Слушаем весь список из конфига, а не только живые чаты: иначе игрок,
+            // который когда-то заблокировал бота, после разблокировки пишет в пустоту —
+            // его сообщения молча игнорируются, потому что чат выпал из рассылки.
+            for (String id : config.getStringList("bot.chats")) {
+                String trimmed = text(id);
+                if (!trimmed.isEmpty()) {
+                    listenChats.add(trimmed);
+                }
+            }
         }
         if (chats.isEmpty() && !MODE_SPOKE.equals(relayMode)) {
             getLogger().severe(messages.get("no-chats"));
@@ -532,11 +541,13 @@ public final class TgRelay extends JavaPlugin {
         formatToMc = config.getString("format.to-minecraft", "[TG] %sender%: %message%");
         pollTimeout = Math.max(5, Math.min(50, config.getInt("polling.timeout-seconds", 25)));
         messagesPerSecond = Math.max(1, Math.min(20, config.getInt("queue.messages-per-second", 3)));
-        whenEmpty = text(config.getString("delivery.when-empty", "")).toLowerCase(Locale.ROOT);
-        if (!WHEN_ECHO.equals(whenEmpty) && !WHEN_HOLD.equals(whenEmpty) && !WHEN_DROP.equals(whenEmpty)) {
-            // обратная совместимость: старый булев ключ, true = держать, false = выбросить
-            whenEmpty = config.getBoolean("delivery.hold-when-empty", true) ? WHEN_HOLD : WHEN_DROP;
-        }
+        String empty = text(config.getString("delivery.when-empty", "")).toLowerCase(Locale.ROOT);
+        whenEmpty = switch (empty) {
+            case "wait", "hold" -> WHEN_WAIT;          // hold — старое имя того же режима
+            case "skip", "echo", "drop" -> WHEN_SKIP;  // echo/drop — старые имена
+            // ключа нет или он незнакомый: старое булево значение, true = держать
+            default -> config.getBoolean("delivery.hold-when-empty", true) ? WHEN_WAIT : WHEN_SKIP;
+        };
         holdMaxMinutes = Math.max(1, config.getInt("delivery.hold-max-minutes", 10));
         holdMaxMessages = Math.max(1, config.getInt("delivery.hold-max-messages", 20));
 
@@ -821,7 +832,7 @@ public final class TgRelay extends JavaPlugin {
             log(messages.get("spoke-copy-dropped", line));
             return;
         }
-        if (WHEN_HOLD.equals(whenEmpty)) {
+        if (WHEN_WAIT.equals(whenEmpty)) {
             hold(line);
             log(messages.get("held", line));
             return;
@@ -1013,7 +1024,8 @@ public final class TgRelay extends JavaPlugin {
                 relayMode, serverName.isEmpty() ? "-" : serverName, bridgeWhere())));
         sender.sendMessage(Component.text(messages.get("moderation-status", moderationWhere())));
         if (disabledChatsCount() > 0) {
-            sender.sendMessage(Component.text(messages.get("disabled-status", disabledChatsCount())));
+            sender.sendMessage(Component.text(
+                    messages.get("disabled-status", disabledChatsCount(), configuredChats)));
         }
         return true;
     }

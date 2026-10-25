@@ -177,7 +177,7 @@ Outbound rate limit (clamped to 1–20). Telegram tolerates about 30 messages pe
 
 ```yaml
 delivery:
-  when-empty: echo
+  when-empty: skip
   hold-max-minutes: 10
   hold-max-messages: 20
 ```
@@ -193,9 +193,11 @@ Two separate things happen to every Telegram message, and only the second one is
 
 | `when-empty` | In-game copy |
 |---|---|
-| `echo` (default) | nothing waits — there is nobody to show it to, and the feed already has the message |
-| `hold` | the line is buffered and printed when the first player joins |
-| `drop` | nothing waits, and the console says the line was skipped |
+| `skip` (default) | nothing waits — there is nobody to show it to, and the feed already has the message |
+| `wait` | the line is buffered and printed when the first player joins |
+
+`hold`, `echo` and `drop` are the old names and still parse: `hold` → `wait`,
+`echo` and `drop` → `skip`.
 
 If a player *is* online, the message is printed in game as usual, and the feed copy is still made.
 
@@ -205,7 +207,7 @@ dropped instead of being replayed to whoever joins next.
 
 | Key | Meaning |
 |---|---|
-| `when-empty` | `echo`, `hold` or `drop` — see above. |
+| `when-empty` | `skip` or `wait` — see above (`hold`, `echo`, `drop` still parse as aliases). |
 | `hold-max-minutes` | How long a held message stays valid. |
 | `hold-max-messages` | How many held messages are kept at most (oldest are dropped first). |
 
@@ -215,7 +217,7 @@ came from, so it only prints what the hub pushes.
 The hub also asks every spoke how many players it has (`POST /status`), so "nobody in game"
 means nobody on **any** server: if a player is on the second server, the message is shown there
 and the bot stays quiet. `delivery.hold-when-empty` is the old
-boolean form and still works (it maps to `hold` / `drop`), but `when-empty` wins when both are set.
+boolean form and still works (`true` → `wait`, `false` → `skip`), but `when-empty` wins when both are set.
 
 ---
 

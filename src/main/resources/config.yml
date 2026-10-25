@@ -102,10 +102,9 @@ delivery:
   # Every message from Telegram is always copied into bot.chats (except the chat
   # it came from), so someone who is not in game still sees everything in Telegram.
   # This setting only decides what to do with the in-game copy when nobody is online:
-  #   echo — nothing waits: no player is there, so there is nobody to show it to
-  #   hold — keep it and print it when the first player joins
-  #   drop — same as echo, but says so in the console
-  when-empty: echo
+  #   skip — nothing waits: the feed already has the message (default)
+  #   wait — keep it and print it when the first player joins
+  when-empty: skip
   # How long a held message waits for the first player, and how many are kept.
   hold-max-minutes: 10
   hold-max-messages: 20

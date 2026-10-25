@@ -174,7 +174,7 @@ Requires JDK 21+.
   game chat for everyone, they just do not reach the public Telegram chats.
 * Every Telegram message is copied into the bot chats (except the chat it came from), so you see
   the conversation in Telegram even when you are not in game. `delivery.when-empty` only decides
-  whether the in-game copy waits for the first player (`hold`) or not (default `echo`).
+  whether the in-game copy waits for the first player (`wait`) or not (`skip`, default).
 
 ## Related
 
