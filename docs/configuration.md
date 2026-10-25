@@ -187,9 +187,13 @@ at 3 a.m. should not be left guessing whether anyone read it.
 
 | `when-empty` | What happens |
 |---|---|
-| `echo` (default) | The author gets one short line in the chat they wrote from — "nobody is in game right now, I will show your message as soon as someone joins" — and the message is held for the game. The reply never repeats the message and never goes to other chats: broadcasting it would expose the author's `@username` and the text of a private message to everyone in the feed. |
-| `hold` | Silence: the line only appears in the game when the first player joins. |
+| `echo` (default) | The message is posted into `bot.chats` **immediately**, skipping the chat it came from, and nothing is kept for later. The game chat has nobody to show it to, so the bot feed is where it lands — no waiting, no buffer that might expire. |
+| `hold` | Silence: nothing goes to the bot, the line only appears in the game when the first player joins. |
 | `drop` | The line is thrown away and written to the console log. |
+
+The two modes are deliberately exclusive: `echo` means "show it now, somewhere", `hold` means
+"keep it for the game and stay quiet". Earlier versions tried to do both at once and the result
+was a notice for the author plus a buffer nobody could predict.
 
 A **spoke** never buffers what the hub sends it: that copy is already handled, and the spoke
 does not know whether the hub showed it. If nobody is online there, the line is logged as
@@ -202,7 +206,11 @@ dropped instead of being replayed to whoever joins next.
 | `hold-max-messages` | How many held messages are kept at most (oldest are dropped first). |
 
 On a spoke server the echo is the hub's job: the spoke does not know which chat the message
-came from, so it only prints what the hub pushes. `delivery.hold-when-empty` is the old
+came from, so it only prints what the hub pushes.
+
+The hub also asks every spoke how many players it has (`POST /status`), so "nobody in game"
+means nobody on **any** server: if a player is on the second server, the message is shown there
+and the bot stays quiet. `delivery.hold-when-empty` is the old
 boolean form and still works (it maps to `hold` / `drop`), but `when-empty` wins when both are set.
 
 ---

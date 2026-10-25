@@ -100,10 +100,9 @@ moderation:
 
 delivery:
   # What to do with a Telegram message when nobody is in game:
-  #   echo — answer the author with one short line ("show it when someone joins")
-  #          and hold the message for the game (default). The reply goes only to
-  #          the chat the message came from and does not repeat its text.
-  #   hold — say nothing, only show it when someone joins
+  #   echo — post the message into bot.chats right away (everyone except its
+  #          author) and keep nothing for later: default, nothing waits
+  #   hold — say nothing, show it when the first player joins
   #   drop — ignore it completely
   # A spoke never buffers what the hub sends: that copy is already handled.
   when-empty: echo

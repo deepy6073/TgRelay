@@ -208,6 +208,17 @@ public final class TgRelay extends JavaPlugin {
                         showInGame(text, null);
                     }
                 });
+        bridge.self(new Bridge.Self() {
+            @Override
+            public String name() {
+                return serverName;
+            }
+
+            @Override
+            public int players() {
+                return getServer().getOnlinePlayers().size();
+            }
+        });
         bridgeSignature = bridgeSignature();
         try {
             String bound = bridge.listen(relayBind);
@@ -777,42 +788,66 @@ public final class TgRelay extends JavaPlugin {
     /**
      * Печатает строку из Telegram в игре. Общая точка для своего бота и для главного сервера.
      *
-     * В игре никого — работает {@code delivery.when-empty}: {@code echo} (по умолчанию)
-     * отвечает автору короткой строкой «покажу, когда кто-то зайдёт» и придерживает
-     * сообщение до входа игрока, {@code hold} молча придерживает, {@code drop} выбрасывает.
-     *
-     * Ответ уходит только в тот чат, откуда пришло сообщение, и не повторяет его текст:
-     * рассылка в общий фид раскрывала бы ник автора и содержание его личных сообщений.
-     *
-     * Второй сервер ничего не придерживает: он получает копию уже обработанного главным
-     * сообщения, и копить её значит показать случайному игроку чужую переписку.
+     * <ol>
+     *   <li>есть игроки здесь — печатаем им;</li>
+     *   <li>здесь пусто, но кто-то есть на втором сервере — он это и покажет, бот молчит;</li>
+     *   <li>пусто везде — по {@code delivery.when-empty}: {@code echo} сразу отдаёт сообщение
+     *       в чаты бота (кроме чата автора) и ничего не копит, {@code hold} копит молча,
+     *       {@code drop} выбрасывает;</li>
+     *   <li>второй сервер копию от главного не копит и автору не отвечает.</li>
+     * </ol>
      *
      * @param sourceChat чат, откуда пришло сообщение; null — копия от главного сервера
      */
     private void showInGame(String line, String sourceChat) {
-        Component text = Component.text(line, NamedTextColor.GRAY);
-        getServer().getScheduler().runTask(this, () -> {
-            if (!getServer().getOnlinePlayers().isEmpty()) {
-                // напрямую в чат игрокам, без команды tellraw: не зависит от разбора
-                // аргументов и от того, что кто-то другой считает про @a
-                getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
-                log(messages.get("shown", line));
-                return;
+        if (!getServer().getOnlinePlayers().isEmpty()) {
+            deliverToGame(line);
+            return;
+        }
+
+        String busyElsewhere = null;
+        if (bridge != null && isHub()) {
+            for (Bridge.Peer peer : bridge.peers()) {
+                if (peer.players > 0) {
+                    busyElsewhere = peer.name;
+                    break;
+                }
             }
-            if (sourceChat == null || sourceChat.isBlank()) {
+        }
+        if (busyElsewhere != null) {
+            log(messages.get("shown-elsewhere", busyElsewhere, line));
+            return;
+        }
+
+        if (sourceChat == null || sourceChat.isBlank()) {
+            log(messages.get("spoke-copy-dropped", line));
+            return;
+        }
+        if (WHEN_ECHO.equals(whenEmpty)) {
+            List<String> targets = new ArrayList<>(chats);
+            targets.remove(sourceChat);    // автору своё же сообщение не дублируем
+            if (targets.isEmpty()) {
                 log(messages.get("dropped", line));
                 return;
             }
-            if (WHEN_DROP.equals(whenEmpty)) {
-                log(messages.get("dropped", line));
-                return;
-            }
-            if (WHEN_ECHO.equals(whenEmpty)) {
-                enqueueTo(List.of(sourceChat), messages.get("empty-notice"));
-                log(messages.get("echoed", line));
-            }
+            enqueueTo(targets, line);
+            log(messages.get("echoed", line));
+            return;
+        }
+        if (WHEN_HOLD.equals(whenEmpty)) {
             hold(line);
             log(messages.get("held", line));
+            return;
+        }
+        log(messages.get("dropped", line));
+    }
+
+    /** Отдать строку всем, кто в игре. */
+    private void deliverToGame(String line) {
+        Component text = Component.text(line, NamedTextColor.GRAY);
+        getServer().getScheduler().runTask(this, () -> {
+            getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
+            log(messages.get("shown", line));
         });
     }
 

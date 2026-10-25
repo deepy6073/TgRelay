@@ -67,6 +67,7 @@ final class Bridge {
 
     private HttpServer server;
     private ExecutorService workers;
+    private Self self;
 
     Bridge(Messages messages, boolean spoke, String token,
            List<String> spokeUrls, String hubUrl, Events events) {
@@ -112,6 +113,7 @@ final class Bridge {
         });
         server.setExecutor(workers);
         server.createContext("/", this::handle);
+        server.createContext("/status", this::handleStatus);
         server.start();
         InetSocketAddress bound = server.getAddress();
         return bound.getAddress().getHostAddress() + ":" + bound.getPort();
@@ -144,6 +146,58 @@ final class Bridge {
                         }
                     });
         }
+    }
+
+    /** Ответ на опрос «сколько у вас игроков»: имя сервера и число онлайн. */
+    static final class Peer {
+        final String name;
+        final int players;
+
+        Peer(String name, int players) {
+            this.name = name;
+            this.players = players;
+        }
+    }
+
+    /** Что сервер отвечает на /status: его имя и сколько людей в игре. */
+    interface Self {
+        String name();
+
+        int players();
+    }
+
+    void self(Self self) {
+        this.self = self;
+    }
+
+    /**
+     * Hub: спрашивает у каждого второго сервера, сколько у него игроков.
+     * Нужно, чтобы «никого в игре» означало «никого ни на одном сервере».
+     */
+    List<Peer> peers() {
+        List<Peer> result = new ArrayList<>();
+        for (URI spokeUri : spokes) {
+            try {
+                HttpResponse<String> response = http.send(
+                        HttpRequest.newBuilder(spokeUri.resolve("/status"))
+                                .timeout(Duration.ofMillis(700))
+                                .header(TOKEN_HEADER, token)
+                                .POST(HttpRequest.BodyPublishers.noBody())
+                                .build(),
+                        HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() >= 300) {
+                    continue;
+                }
+                Map<String, Object> json = Json.parseObject(response.body());
+                Object name = json.get("name");
+                Object players = json.get("players");
+                result.add(new Peer(name instanceof String ? (String) name : spokeUri.toString(),
+                        players instanceof Number ? ((Number) players).intValue() : 0));
+            } catch (Exception ignored) {
+                // сервер молчит — считаем, что игроков там нет
+            }
+        }
+        return result;
     }
 
     void close() {
@@ -210,6 +264,26 @@ final class Bridge {
                 events.onSpokeEvent(line, muted);
             }
             respond(exchange, 204);
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private void handleStatus(HttpExchange exchange) throws IOException {
+        try {
+            if (!authorised(exchange.getRequestHeaders().getFirst(TOKEN_HEADER))) {
+                respond(exchange, 401);
+                return;
+            }
+            int players = self == null ? 0 : self.players();
+            String name = self == null ? "" : self.name();
+            byte[] body = ("{\"players\":" + players + ",\"name\":" + Json.quote(name) + "}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
         } finally {
             exchange.close();
         }

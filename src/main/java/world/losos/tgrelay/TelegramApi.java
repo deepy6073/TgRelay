@@ -98,12 +98,22 @@ final class TelegramApi {
                 if (id != null) {
                     fromId = String.valueOf(id);
                 }
+                // Одно имя в обе стороны: человеку в игре показываем имя из профиля,
+                // а не логин @username — иначе в Telegram логин скрыт, а в игре виден.
                 Object username = ((Map<?, ?>) from).get("username");
                 Object firstName = ((Map<?, ?>) from).get("first_name");
-                if (username instanceof String) {
+                Object lastName = ((Map<?, ?>) from).get("last_name");
+                String display = "";
+                if (firstName instanceof String) {
+                    display = ((String) firstName).trim();
+                }
+                if (lastName instanceof String && !((String) lastName).isBlank()) {
+                    display = (display + " " + ((String) lastName).trim()).trim();
+                }
+                if (!display.isEmpty()) {
+                    sender = display;
+                } else if (username instanceof String) {
                     sender = "@" + username;
-                } else if (firstName instanceof String) {
-                    sender = (String) firstName;
                 }
             }
 
