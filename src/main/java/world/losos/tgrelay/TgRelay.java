@@ -1,6 +1,7 @@
 package world.losos.tgrelay;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -248,7 +249,8 @@ public final class TgRelay extends JavaPlugin {
             return;
         }
         for (String line : lines) {
-            getServer().dispatchCommand(getServer().getConsoleSender(), "tellraw @a " + jsonText(line));
+            Component text = Component.text(line, NamedTextColor.GRAY);
+            getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
         }
         log(messages.get("flushed", lines.size()));
     }
@@ -788,10 +790,13 @@ public final class TgRelay extends JavaPlugin {
      * @param sourceChat чат, откуда пришло сообщение; null — копия от главного сервера
      */
     private void showInGame(String line, String sourceChat) {
-        String command = "tellraw @a " + jsonText(line);
+        Component text = Component.text(line, NamedTextColor.GRAY);
         getServer().getScheduler().runTask(this, () -> {
             if (!getServer().getOnlinePlayers().isEmpty()) {
-                getServer().dispatchCommand(getServer().getConsoleSender(), command);
+                // напрямую в чат игрокам, без команды tellraw: не зависит от разбора
+                // аргументов и от того, что кто-то другой считает про @a
+                getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
+                log(messages.get("shown", line));
                 return;
             }
             if (sourceChat == null || sourceChat.isBlank()) {
@@ -865,24 +870,6 @@ public final class TgRelay extends JavaPlugin {
         return null;
     }
 
-    private static String jsonText(String text) {
-        StringBuilder builder = new StringBuilder("{\"text\":\"");
-        for (char ch : text.toCharArray()) {
-            switch (ch) {
-                case '"': builder.append("\\\""); break;
-                case '\\': builder.append("\\\\"); break;
-                case '\n': builder.append("\\n"); break;
-                case '\r': break;
-                default:
-                    if (ch < 0x20) {
-                        builder.append(String.format("\\u%04x", (int) ch));
-                    } else {
-                        builder.append(ch);
-                    }
-            }
-        }
-        return builder.append("\",\"color\":\"gray\"}").toString();
-    }
 
     /* ── команды ── */
 
