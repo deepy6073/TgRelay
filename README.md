@@ -37,6 +37,7 @@ TgRelay does it properly:
 * **outbound queue** with a rate limit, so a chatty server cannot flood Telegram and get the bot throttled;
 * **backoff on errors** instead of a retry storm;
 * **several servers on one bot** — a hub/spoke bridge, so a second server reports into the same chat with its own prefix (below);
+* **server messages and admin notices** — `/say` reaches the chat, and "server started / stopping / Telegram is down" reaches the admins;
 * no third-party HTTP libraries — only the JDK and the server API.
 
 ## Install
@@ -167,8 +168,8 @@ Requires JDK 21+.
 ## Notes
 
 * Paper / Purpur (uses `AsyncChatEvent`). Spigot's legacy `AsyncPlayerChatEvent` is not wired.
-* Telegram → Minecraft messages are printed with `tellraw`, so they keep colours and are not
-  attributed to any player.
+* Telegram → Minecraft messages go straight to every online player and are not attributed to any
+  player, so they cannot be confused with chat.
 * Only chats listed in `bot.chats` are accepted for the Telegram → Minecraft direction.
 * Muted players are muted in the *outbound* direction only — their messages still appear in the
   game chat for everyone, they just do not reach the public Telegram chats.

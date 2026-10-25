@@ -135,6 +135,12 @@ public final class TgRelay extends JavaPlugin {
     private String mutePrefix;
     private String moderationChat;
 
+    /* ── технические уведомления админам ── */
+    private boolean noticesEnabled;
+    private String noticesPrefix;
+    private int pollFailureLimit;
+    private final AtomicLong pollFailures = new AtomicLong(0);
+
     static void log(String message) {
         if (instance != null) {
             instance.getLogger().info(message);
@@ -187,6 +193,29 @@ public final class TgRelay extends JavaPlugin {
         }
         if (links.size() > 0) {
             getLogger().info(messages.get("links-loaded", links.size()));
+        }
+        notifyAdmins(messages.get("server-started", serverName.isEmpty() ? "?" : serverName));
+    }
+
+    /**
+     * Сообщение «сервер останавливается» отправляем напрямую: очередь к этому моменту
+     * уже останавливается, и через неё сообщение не уйдёт.
+     */
+    private void sendStoppingNotice() {
+        if (!noticesEnabled || api == null) {
+            return;
+        }
+        List<String> targets = moderationTargets();
+        if (targets.isEmpty()) {
+            return;
+        }
+        String text = noticesPrefix + messages.get("server-stopping", serverName.isEmpty() ? "?" : serverName);
+        for (String chat : targets) {
+            try {
+                api.send(chat, text);
+            } catch (Exception ignored) {
+                // сервер выключается: молча пропускаем
+            }
         }
     }
 
@@ -457,6 +486,7 @@ public final class TgRelay extends JavaPlugin {
             bridge.close();
             bridge = null;
         }
+        sendStoppingNotice();
         getLogger().info(messages.get("stopped"));
     }
 
@@ -559,6 +589,10 @@ public final class TgRelay extends JavaPlugin {
             moderationChat = "";
         }
 
+        noticesEnabled = config.getBoolean("notices.enabled", true);
+        noticesPrefix = config.getString("notices.prefix", "[TgRelay] ");
+        pollFailureLimit = Math.max(1, config.getInt("notices.poll-failures", 5));
+
         // Мост поднимается один раз в onEnable: сокет и потоки на лету не переедут,
         // поэтому на reload честно говорим, что нужен перезапуск, а не делаем вид.
         if (!bridgeSignature.isEmpty() && !bridgeSignature.equals(bridgeSignature())) {
@@ -660,6 +694,29 @@ public final class TgRelay extends JavaPlugin {
         return links.telegramIdsOf(operatorIds());
     }
 
+    /** Сообщение сервера (say, объявление плагина) — в обычные чаты. */
+    void relayBroadcast(String line) {
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        String text = withServer(line);
+        enqueue(text);
+        log(messages.get("broadcast-relayed", text));
+    }
+
+    /** Техническое сообщение админам: модерация в приоритете, иначе консоль. */
+    private void notifyAdmins(String text) {
+        if (!noticesEnabled || text == null || text.isBlank()) {
+            return;
+        }
+        List<String> targets = moderationTargets();
+        if (targets.isEmpty()) {
+            log(messages.get("notices-console", text));
+            return;
+        }
+        enqueueTo(targets, noticesPrefix + text);
+    }
+
     /** Puts an already formatted line into the outbound queue (обычные чаты). */
     void enqueue(String text) {
         enqueueTo(null, text);
@@ -758,6 +815,10 @@ public final class TgRelay extends JavaPlugin {
         while (running.get()) {
             try {
                 List<TelegramApi.Update> updates = api.poll(offset.get() + 1, pollTimeout);
+                if (pollFailures.get() != 0) {
+                    pollFailures.set(0);
+                    notifyAdmins(messages.get("telegram-up", serverName.isEmpty() ? "?" : serverName));
+                }
                 long highest = offset.get();
                 for (TelegramApi.Update update : updates) {
                     highest = Math.max(highest, update.updateId);
@@ -786,6 +847,10 @@ public final class TgRelay extends JavaPlugin {
                 return;
             } catch (Exception error) {
                 log(messages.get("poll-failed", String.valueOf(error)));
+                if (pollFailures.incrementAndGet() == pollFailureLimit) {
+                    notifyAdmins(messages.get("telegram-down", pollFailureLimit,
+                            String.valueOf(error.getMessage())));
+                }
                 try {
                     Thread.sleep(5000);   // back off instead of hammering Telegram
                 } catch (InterruptedException interrupted) {

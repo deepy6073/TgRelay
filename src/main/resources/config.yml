@@ -61,6 +61,10 @@ events:
   quit: true
   death: true
   advancement: true
+  # Server messages: /say, announcements from other plugins, anything broadcast.
+  broadcast: true
+
+  broadcast-format: "[%server%] %message%"
 
   join-format: "%player% joined the game"
   quit-format: "%player% left the game"
@@ -97,6 +101,15 @@ mute:
 # Nobody linked and no chat set -> muted messages only reach the server console.
 moderation:
   chat: ""
+
+# Technical messages for admins (not for players): server started, server is
+# stopping, Telegram unreachable for a while. They go to moderation.chat when it
+# is set, otherwise to a DM of every linked operator, otherwise to the console.
+notices:
+  enabled: true
+  prefix: "[TgRelay] "
+  # How many failed Telegram polls in a row before the admins hear about it once.
+  poll-failures: 5
 
 delivery:
   # Every message from Telegram is always copied into bot.chats (except the chat
