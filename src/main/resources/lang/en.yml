@@ -77,3 +77,4 @@ restart-required: "server.name, relay.* or bot.token changed — restart the ser
 status-mode: "TgRelay: mode %s, server '%s', bridge %s"
 status-spokes: "%s, %d spoke(s)"
 moderation-test-sent-hub: "TgRelay: test muted message sent through the hub"
+echoed: "nobody online — answered in the same chat, message held for the game -> %s"

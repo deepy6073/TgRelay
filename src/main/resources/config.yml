@@ -99,8 +99,14 @@ moderation:
   chat: ""
 
 delivery:
-  # Nobody online? Hold the message and deliver it to the game when the first
-  # player joins, instead of dropping it. Set to false to drop immediately.
-  hold-when-empty: true
+  # What to do with a Telegram message when nobody is in game:
+  #   echo — answer in the same chat it came from, then show it in the game as
+  #          soon as someone joins (default: the writer is not left guessing)
+  #   hold — say nothing, only show it when someone joins
+  #   drop — ignore it completely
+  when-empty: echo
+  # Appended to the echoed copy, so a silent-looking chat never happens.
+  echo-suffix: " (nobody in game — waiting for a player to join)"
+  # How long a held message waits for the first player, and how many are kept.
   hold-max-minutes: 10
   hold-max-messages: 20

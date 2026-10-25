@@ -77,3 +77,4 @@ restart-required: "server.name、relay.* 或 bot.token 已更改 — 需要重�
 status-mode: "TgRelay：模式 %s，服务器 '%s'，网桥 %s"
 status-spokes: "%s，从节点 %d 个"
 moderation-test-sent-hub: "TgRelay：测试屏蔽消息已通过中心节点发送"
+echoed: "游戏内无人 — 已回复到原会话，消息将暂存到有人进入 -> %s"

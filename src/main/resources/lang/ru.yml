@@ -77,3 +77,4 @@ restart-required: "server.name, relay.* или bot.token изменились �
 status-mode: "TgRelay: режим %s, сервер '%s', мост %s"
 status-spokes: "%s, сателлитов %d"
 moderation-test-sent-hub: "TgRelay: тестовое заглушённое сообщение отправлено через ступицу"
+echoed: "в игре никого — ответил в тот же чат, сообщение придержано до входа -> %s"

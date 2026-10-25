@@ -77,6 +77,13 @@ public final class TgRelay extends JavaPlugin {
     /** Бота нет: чат уходит на ступицу, её сообщения печатаются здесь. */
     static final String MODE_SPOKE = "spoke";
 
+    /** В игре никого: ответить в тот же чат, откуда пришло сообщение (по умолчанию). */
+    static final String WHEN_ECHO = "echo";
+    /** В игре никого: молча придержать до первого входа. */
+    static final String WHEN_HOLD = "hold";
+    /** В игре никого: выбросить. */
+    static final String WHEN_DROP = "drop";
+
     private static TgRelay instance;
 
     private final BlockingQueue<Outgoing> outbox = new LinkedBlockingQueue<>(500);
@@ -84,7 +91,9 @@ public final class TgRelay extends JavaPlugin {
     private final AtomicLong offset = new AtomicLong(0);
     private final java.util.Deque<long[]> pendingTimes = new java.util.ArrayDeque<>();
     private final java.util.Deque<String> pendingLines = new java.util.ArrayDeque<>();
-    private boolean holdWhenEmpty;
+    /** Что делать с сообщением из Telegram, когда в игре никого: echo, hold или drop. */
+    private String whenEmpty = WHEN_ECHO;
+    private String echoSuffix = "";
     private int holdMaxMinutes;
     private int holdMaxMessages;
 
@@ -193,7 +202,8 @@ public final class TgRelay extends JavaPlugin {
 
                     @Override
                     public void onInbound(String text) {
-                        showInGame(text);
+                        // сателлит не знает исходный чат: эхо — забота ступицы
+                        showInGame(text, null);
                     }
                 });
         bridgeSignature = bridgeSignature();
@@ -447,7 +457,16 @@ public final class TgRelay extends JavaPlugin {
         formatToMc = config.getString("format.to-minecraft", "[TG] %sender%: %message%");
         pollTimeout = Math.max(5, Math.min(50, config.getInt("polling.timeout-seconds", 25)));
         messagesPerSecond = Math.max(1, Math.min(20, config.getInt("queue.messages-per-second", 3)));
-        holdWhenEmpty = config.getBoolean("delivery.hold-when-empty", true);
+        whenEmpty = text(config.getString("delivery.when-empty", "")).toLowerCase(Locale.ROOT);
+        if (!WHEN_ECHO.equals(whenEmpty) && !WHEN_HOLD.equals(whenEmpty) && !WHEN_DROP.equals(whenEmpty)) {
+            // обратная совместимость: старый булев ключ, true = держать, false = выбросить
+            whenEmpty = config.getBoolean("delivery.hold-when-empty", true) ? WHEN_HOLD : WHEN_DROP;
+        }
+        echoSuffix = config.getString("delivery.echo-suffix",
+                " (nobody in game — waiting for a player to join)");
+        if (echoSuffix == null) {
+            echoSuffix = "";
+        }
         holdMaxMinutes = Math.max(1, config.getInt("delivery.hold-max-minutes", 10));
         holdMaxMessages = Math.max(1, config.getInt("delivery.hold-max-messages", 20));
 
@@ -673,7 +692,7 @@ public final class TgRelay extends JavaPlugin {
                     if (isHub() && bridge != null) {
                         bridge.pushInbound(line);   // то же сообщение — в чат сателлитов
                     }
-                    showInGame(line);
+                    showInGame(line, update.chatId);
                 }
                 if (highest != offset.get()) {
                     offset.set(highest);
@@ -695,22 +714,31 @@ public final class TgRelay extends JavaPlugin {
     }
 
     /**
-     * Печатает строку из Telegram в игре. Общая точка для своего бота и для ступицы:
-     * если в игре никого нет — строка придерживается до первого входа.
+     * Печатает строку из Telegram в игре. Общая точка для своего бота и для ступицы.
+     *
+     * В игре никого — работает {@code delivery.when-empty}:
+     * {@code echo} отвечает в тот же чат (по умолчанию) и всё равно придерживает строку,
+     * {@code hold} молча придерживает, {@code drop} выбрасывает.
+     *
+     * @param sourceChat чат, откуда пришло сообщение — туда уходит эхо; null, если его нет
      */
-    private void showInGame(String line) {
+    private void showInGame(String line, String sourceChat) {
         String command = "tellraw @a " + jsonText(line);
         getServer().getScheduler().runTask(this, () -> {
-            if (getServer().getOnlinePlayers().isEmpty()) {
-                if (holdWhenEmpty) {
-                    hold(line);
-                    log(messages.get("held", line));
-                } else {
-                    log(messages.get("dropped", line));
-                }
+            if (!getServer().getOnlinePlayers().isEmpty()) {
+                getServer().dispatchCommand(getServer().getConsoleSender(), command);
                 return;
             }
-            getServer().dispatchCommand(getServer().getConsoleSender(), command);
+            if (WHEN_DROP.equals(whenEmpty)) {
+                log(messages.get("dropped", line));
+                return;
+            }
+            if (WHEN_ECHO.equals(whenEmpty) && sourceChat != null && !sourceChat.isBlank()) {
+                enqueueTo(List.of(sourceChat), line + echoSuffix);
+                log(messages.get("echoed", line));
+            }
+            hold(line);
+            log(messages.get("held", line));
         });
     }
 
