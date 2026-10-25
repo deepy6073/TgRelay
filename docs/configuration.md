@@ -301,6 +301,7 @@ On first start the plugin imports `linkedChats` from an old `plugins/TelegramCha
 | `plugins/TgRelay/state.json` | `{"offset": …}` — the update offset. It is what stops a restart from replaying old Telegram messages into the game. Delete it to start over (the backlog will be replayed). |
 | `plugins/TgRelay/muted.txt` | UUIDs of players who muted themselves. |
 | `plugins/TgRelay/linked.txt` | `<telegram id> <uuid>` pairs. |
+| `plugins/TgRelay/chat-names.txt` | `<chat id> <name>` — human names for logs and `/tgrelay chats`, refreshed from Telegram on start. Nothing in the relay depends on it. |
 | `plugins/TgRelay/disabled-chats.txt` | Chats the plugin stopped writing to because Telegram said the bot is blocked or the chat is gone. They stay out of `bot.chats` across restarts; delete a line and run `/tgrelay reload` to try again. |
 
 All of them are plain text — safe to edit by hand; the two chat lists are re-read by `/tgrelay reload`.
@@ -316,6 +317,7 @@ All of them are plain text — safe to edit by hand; the two chat lists are re-r
 | `/tgrelay status` | everyone | players see their own state, admins also see counters and the moderation route |
 | `/tgrelay reload` | `tgrelay.admin` | re-read `config.yml` |
 | `/tgrelay testmute` | `tgrelay.admin` | send a test message through the moderation route |
+| `/tgrelay chats` | `tgrelay.admin` | list every chat: live ones and the ones Telegram threw out, with names instead of bare ids |
 
 `tgrelay.admin` defaults to op.
 

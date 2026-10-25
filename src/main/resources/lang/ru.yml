@@ -10,7 +10,6 @@ no-chats: "bot.chats пустой — некому писать, мост вык
 reloaded: "TgRelay: конфиг перечитан"
 reload-failed: "TgRelay: конфиг сломан, смотри консоль"
 no-permission: "Нет прав"
-usage: "Использование: /tgrelay off | on | link | unlink | status"
 status: "TgRelay: чатов=%d, в очереди=%d, offset=%d, придержано=%d, заглушено=%d, привязок=%d"
 
 # ── доставка ──
@@ -90,3 +89,7 @@ server-stopping: "сервер %s останавливается"
 telegram-down: "Telegram не отвечает (%d ошибок подряд): %s"
 telegram-up: "связь с Telegram восстановлена (%s)"
 notices-console: "уведомление админам (доставлять некому): %s"
+chats-header: "Чаты бота: живых %d из %d, отключённых %d"
+chats-live: "  + %s"
+chats-dead: "  - %s — бот заблокирован или чат удалён"
+usage: "Использование: /tgrelay off | on | link | unlink | status (админ: reload | testmute | chats)"

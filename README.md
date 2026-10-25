@@ -109,6 +109,7 @@ For a group, add the bot to the group first, otherwise Telegram answers
 | `/tgrelay status` | any player | your own state; admins also see the relay counters |
 | `/tgrelay reload` | `tgrelay.admin` | re-read config.yml |
 | `/tgrelay testmute` | `tgrelay.admin` | send a test message through the moderation route |
+| `/tgrelay chats` | `tgrelay.admin` | every chat with its Telegram name: live and disabled |
 
 ### Self-mute and the moderation channel
 

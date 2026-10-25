@@ -108,6 +108,8 @@ public final class TgRelay extends JavaPlugin {
     private List<String> listenChats;
     /** Сколько чатов прописано в конфиге — чтобы status показывал «13 из 24». */
     private int configuredChats;
+    /** id чата -> человеческое имя: только для логов и /tgrelay chats. */
+    private final Map<String, String> chatNames = new ConcurrentHashMap<>();
     private String formatFromMc;
     private String formatToMc;
     private int pollTimeout;
@@ -195,6 +197,7 @@ public final class TgRelay extends JavaPlugin {
             getLogger().info(messages.get("links-loaded", links.size()));
         }
         notifyAdmins(messages.get("server-started", serverName.isEmpty() ? "?" : serverName));
+        refreshChatNames(true);
     }
 
     /**
@@ -293,6 +296,89 @@ public final class TgRelay extends JavaPlugin {
             getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
         }
         log(messages.get("flushed", lines.size()));
+    }
+
+    /** Подпись чата для логов: «имя» (id), а если имени нет — просто id. */
+    String chatLabel(String chatId) {
+        String name = chatNames.get(chatId);
+        if (name == null || name.isBlank()) {
+            return chatId;
+        }
+        return "\u00AB" + name + "\u00BB (" + chatId + ")";
+    }
+
+    private Path chatNamesFile() {
+        return getDataFolder().toPath().resolve("chat-names.txt");
+    }
+
+    private void loadChatNames() {
+        chatNames.clear();
+        Path file = chatNamesFile();
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        try {
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                int space = trimmed.indexOf(' ');
+                if (space <= 0) {
+                    continue;
+                }
+                chatNames.put(trimmed.substring(0, space), trimmed.substring(space + 1).trim());
+            }
+        } catch (IOException error) {
+            log("не смог прочитать chat-names.txt: " + error);
+        }
+    }
+
+    private void saveChatNames() {
+        Path file = chatNamesFile();
+        try {
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            List<String> lines = new ArrayList<>();
+            lines.add("# id чата и его имя в Telegram — только для логов, рассылке не мешает.");
+            chatNames.forEach((id, name) -> lines.add(id + " " + name));
+            Files.write(file, lines, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            log("не смог записать chat-names.txt: " + error);
+        }
+    }
+
+    /** В фоне спрашиваем у Telegram имена чатов: старт не должен ждать сети. */
+    private void refreshChatNames(boolean onlyMissing) {
+        if (api == null || isSpoke()) {
+            return;
+        }
+        Thread thread = new Thread(() -> {
+            boolean changed = false;
+            for (String chat : chats) {
+                if (onlyMissing && !chatNames.getOrDefault(chat, "").isBlank()) {
+                    continue;
+                }
+                String name = api.chatName(chat);
+                if (!name.isBlank() && !name.equals(chatNames.get(chat))) {
+                    chatNames.put(chat, name);
+                    changed = true;
+                }
+                try {
+                    Thread.sleep(120);   // не частить: у Telegram лимит на запросы
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+            if (changed) {
+                saveChatNames();
+            }
+        }, "TgRelay-names");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /** Файл с чатами, куда бот больше не пишет: их выкинул сам Telegram. */
@@ -533,6 +619,7 @@ public final class TgRelay extends JavaPlugin {
 
         configuredChats = config.getStringList("bot.chats").size();
         loadDisabledChats();
+        loadChatNames();
         chats.clear();
         int skipped = 0;
         for (String id : config.getStringList("bot.chats")) {
@@ -658,7 +745,7 @@ public final class TgRelay extends JavaPlugin {
 
     /** Заглушённое сообщение: админский чат, личка привязанным опам или консоль. */
     private void relayMuted(String line) {
-        String text = mutePrefix + line;
+        String text = withServer(mutePrefix + line);
         if (isSpoke()) {
             // куда именно — решает главный сервер: у него канал модерации и привязки админов
             enqueueMuted(text);
@@ -766,9 +853,9 @@ public final class TgRelay extends JavaPlugin {
                         if (item.targets == null && chats.remove(chat)) {
                             disabledChats.add(chat);
                             saveDisabledChats();
-                            log(messages.get("chat-disabled", chat));
+                            log(messages.get("chat-disabled", chatLabel(chat)));
                         } else if (item.targets != null) {
-                            log(messages.get("admin-unreachable", chat));
+                            log(messages.get("admin-unreachable", chatLabel(chat)));
                         }
                         continue;
                     }
@@ -995,6 +1082,7 @@ public final class TgRelay extends JavaPlugin {
                     return true;
                 }
                 if (loadSettings()) {
+                    refreshChatNames(true);
                     sender.sendMessage(Component.text(messages.get("reloaded")));
                 } else {
                     sender.sendMessage(Component.text(messages.get("reload-failed")));
@@ -1005,6 +1093,11 @@ public final class TgRelay extends JavaPlugin {
                     return true;
                 }
                 return testModeration(sender);
+            case "chats":
+                if (!requireAdmin(sender)) {
+                    return true;
+                }
+                return listChats(sender);
             default:
                 sender.sendMessage(Component.text(messages.get("usage")));
                 return true;
@@ -1106,6 +1199,19 @@ public final class TgRelay extends JavaPlugin {
                     : relayBind;
         }
         return "-";
+    }
+
+    /** Список чатов: живые и отключённые, с именами из Telegram. */
+    private boolean listChats(CommandSender sender) {
+        sender.sendMessage(Component.text(messages.get("chats-header",
+                chats.size(), configuredChats, disabledChats.size())));
+        for (String chat : chats) {
+            sender.sendMessage(Component.text(messages.get("chats-live", chatLabel(chat))));
+        }
+        for (String chat : new java.util.TreeSet<>(disabledChats)) {
+            sender.sendMessage(Component.text(messages.get("chats-dead", chatLabel(chat))));
+        }
+        return true;
     }
 
     /** Человеческое описание того, куда уходят `[mute]`-сообщения. */

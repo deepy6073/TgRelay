@@ -159,6 +159,44 @@ final class TelegramApi {
         return Result.FAILED;
     }
 
+    /**
+     * Имя чата для логов и /tgrelay chats: заголовок группы, имя человека или @username.
+     * Возвращает пустую строку, если Telegram не ответил.
+     */
+    String chatName(String chatId) {
+        try {
+            Map<String, Object> answer = call("getChat", "chat_id=" + encode(chatId), 10);
+            if (answer == null || !Boolean.TRUE.equals(answer.get("ok"))) {
+                return "";
+            }
+            Object result = answer.get("result");
+            if (!(result instanceof Map)) {
+                return "";
+            }
+            Map<?, ?> chat = (Map<?, ?>) result;
+            Object title = chat.get("title");
+            if (title instanceof String && !((String) title).isBlank()) {
+                return ((String) title).trim();
+            }
+            String name = "";
+            Object first = chat.get("first_name");
+            if (first instanceof String) {
+                name = ((String) first).trim();
+            }
+            Object last = chat.get("last_name");
+            if (last instanceof String && !((String) last).isBlank()) {
+                name = (name + " " + ((String) last).trim()).trim();
+            }
+            Object username = chat.get("username");
+            if (username instanceof String && !((String) username).isBlank()) {
+                name = name.isEmpty() ? "@" + username : name + " (@" + username + ")";
+            }
+            return name;
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
     private Map<String, Object> call(String method, String query, int timeoutSeconds) throws Exception {
         URI uri = URI.create("https://api.telegram.org/bot" + token + "/" + method + "?" + query);
         HttpRequest request = HttpRequest.newBuilder(uri)
