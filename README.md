@@ -192,7 +192,7 @@ Requires JDK 21+.
 ## Authors
 
 * **Deepy** — code, build, docs. `<deepy6073@gmail.com>`
-* **[Stil-ru](https://github.com/Stil-ru)** — the server this was written for: the incident that
-  exposed the leak, production testing on a live 2014 world, and the idea of publishing it.
+* **[Stil-ru](https://github.com/Stil-ru)** — owner of the server this was written for: he brought
+  the incident that exposed the leak, ran the plugin on a live 2014 world, and pushed to publish it.
 
 MIT licensed.
