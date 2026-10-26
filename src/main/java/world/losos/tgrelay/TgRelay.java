@@ -918,7 +918,7 @@ public final class TgRelay extends JavaPlugin {
                     }
 
                     String line = withServer(formatToMc
-                            .replace("%sender%", update.sender)
+                            .replace("%sender%", minecraftName(update.fromId, update.sender))
                             .replace("%message%", update.text));
                     if (isHub() && bridge != null) {
                         bridge.pushInbound(line);   // то же сообщение — на вторые серверы
@@ -990,6 +990,31 @@ public final class TgRelay extends JavaPlugin {
             return;
         }
         log(messages.get("dropped", line));
+    }
+
+    /**
+     * Имя отправителя для игрового чата: ник из Minecraft, если телеграм-аккаунт
+     * привязан к игроку; иначе то, что дал Telegram. Ник — главный источник правды,
+     * иначе в игре человек называется не тем именем, которое видят остальные.
+     */
+    private String minecraftName(String telegramId, String fallback) {
+        UUID player = links.playerOf(telegramId);
+        if (player == null) {
+            return fallback;
+        }
+        String name = null;
+        Player online = getServer().getPlayer(player);
+        if (online != null) {
+            name = online.getName();
+        }
+        if (name == null || name.isBlank()) {
+            try {
+                name = getServer().getOfflinePlayer(player).getName();
+            } catch (Exception ignored) {
+                name = null;
+            }
+        }
+        return (name == null || name.isBlank()) ? fallback : name;
     }
 
     /** Отдать строку всем, кто в игре. */

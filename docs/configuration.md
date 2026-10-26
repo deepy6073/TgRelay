@@ -120,7 +120,7 @@ format:
 |---|---|---|
 | `%player%` | player name | — |
 | `%message%` | chat text | message text |
-| `%sender%` | — | Telegram display name (or `@username`) |
+| `%sender%` | — | the Minecraft nickname when the Telegram account is linked (`/tgrelay link`), otherwise the Telegram display name |
 | `%server%` | `server.name` | `server.name` |
 
 `%server%` also works in `events.*-format` and in `mute.prefix`. With an empty `server.name` it expands to nothing, so a single-server setup never sees a stray empty bracket.

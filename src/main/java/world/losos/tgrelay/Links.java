@@ -88,6 +88,11 @@ final class Links {
         save();
     }
 
+    /** Игрок, привязанный к этому телеграм-адресу, или null. */
+    UUID playerOf(String telegramId) {
+        return telegramId == null ? null : byTelegram.get(telegramId);
+    }
+
     /** Телеграм-адреса, привязанные к перечисленным игрокам. */
     List<String> telegramIdsOf(Collection<UUID> players) {
         List<String> result = new ArrayList<>();

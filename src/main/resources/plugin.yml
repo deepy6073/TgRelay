@@ -1,5 +1,5 @@
 name: TgRelay
-version: 1.7.0
+version: 1.7.1
 main: world.losos.tgrelay.TgRelay
 api-version: '1.21'
 authors: [Losos World]
