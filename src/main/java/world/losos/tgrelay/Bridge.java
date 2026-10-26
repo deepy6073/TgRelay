@@ -50,6 +50,9 @@ final class Bridge {
 
         /** Spoke: the hub has a Telegram line that belongs in this server's chat. */
         void onInbound(String text);
+
+        /** Hub: a spoke asked to register a link code so the player can link from there. */
+        void onLinkCode(String code, String playerId, String playerName);
     }
 
     private static final int MAX_BODY = 64 * 1024;
@@ -130,6 +133,22 @@ final class Bridge {
         if (response.statusCode() >= 300) {
             throw new IOException("hub answered HTTP " + response.statusCode());
         }
+    }
+
+    /** Spoke: registers a /tgrelay link code on the hub, otherwise the code dies here. */
+    void postLinkCode(String code, String playerId, String playerName) {
+        if (hub == null) {
+            return;
+        }
+        String payload = "{\"kind\":\"linkcode\",\"code\":" + Json.quote(code)
+                + ",\"player\":" + Json.quote(playerId)
+                + ",\"name\":" + Json.quote(playerName) + "}";
+        http.sendAsync(request(hub, payload), HttpResponse.BodyHandlers.discarding())
+                .whenComplete((response, error) -> {
+                    if (error != null || response.statusCode() >= 300) {
+                        warn(hub, error != null ? String.valueOf(error.getCause()) : "HTTP " + response.statusCode());
+                    }
+                });
     }
 
     /** Hub: hands a Telegram line to every server that listens, without blocking the poller. */
@@ -240,6 +259,16 @@ final class Bridge {
             boolean muted = false;
             try {
                 Map<String, Object> json = Json.parseObject(body);
+                if ("linkcode".equals(json.get("kind"))) {
+                    String code = json.get("code") instanceof String ? ((String) json.get("code")).trim() : "";
+                    String player = json.get("player") instanceof String ? ((String) json.get("player")).trim() : "";
+                    String name = json.get("name") instanceof String ? ((String) json.get("name")).trim() : "";
+                    if (!spoke && !code.isEmpty() && !player.isEmpty()) {
+                        events.onLinkCode(code, player, name);
+                    }
+                    respond(exchange, 204);
+                    return;
+                }
                 Object text = json.get("text");
                 if (text instanceof String) {
                     line = ((String) text).trim();

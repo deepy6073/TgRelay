@@ -174,6 +174,9 @@ Requires JDK 21+.
 * Only chats listed in `bot.chats` are accepted for the Telegram → Minecraft direction.
 * Muted players are muted in the *outbound* direction only — their messages still appear in the
   game chat for everyone, they just do not reach the public Telegram chats.
+* **Only linked accounts post into the game.** `/tgrelay link` in game → send the code to the bot;
+  anyone else gets the instruction and nothing reaches the chat. Linking doubles as a subscription:
+  the chat starts receiving the feed without an admin touching the config.
 * A linked player is named by their **Minecraft nickname** in both directions — Telegram messages
   reach the game under the name other players know, not under a Telegram handle.
 * Every Telegram message is copied into the bot chats (except the chat it came from), so you see

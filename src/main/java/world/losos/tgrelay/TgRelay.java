@@ -108,6 +108,11 @@ public final class TgRelay extends JavaPlugin {
     private List<String> listenChats;
     /** Сколько чатов прописано в конфиге — чтобы status показывал «13 из 24». */
     private int configuredChats;
+    /** Чаты, подписавшиеся сами: привязка аккаунта кодом из игры. */
+    private final Set<String> subscribed = ConcurrentHashMap.newKeySet();
+    private boolean linkingRequired = true;
+    /** Кому и когда уже подсказали привязать аккаунт: не чаще раза в полчаса. */
+    private final Map<String, Long> linkHints = new ConcurrentHashMap<>();
     /** id чата -> человеческое имя: только для логов и /tgrelay chats. */
     private final Map<String, String> chatNames = new ConcurrentHashMap<>();
     private String formatFromMc;
@@ -239,6 +244,18 @@ public final class TgRelay extends JavaPlugin {
                         // копия от главного сервера: показываем, только если есть кому
                         showInGame(text, null);
                     }
+
+                    @Override
+                    public void onLinkCode(String code, String playerId, String playerName) {
+                        try {
+                            UUID player = UUID.fromString(playerId);
+                            linkCodes.put(Links.normalise(code),
+                                    new LinkCode(player, System.currentTimeMillis() + LINK_CODE_TTL_MS));
+                            log(messages.get("link-code-from-spoke", playerName, code));
+                        } catch (IllegalArgumentException broken) {
+                            log("код привязки с плохим UUID: " + playerId);
+                        }
+                    }
                 });
         bridge.self(new Bridge.Self() {
             @Override
@@ -296,6 +313,75 @@ public final class TgRelay extends JavaPlugin {
             getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
         }
         log(messages.get("flushed", lines.size()));
+    }
+
+    private Path subscribedFile() {
+        return getDataFolder().toPath().resolve("subscribed.txt");
+    }
+
+    private void loadSubscribed() {
+        subscribed.clear();
+        Path file = subscribedFile();
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        try {
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                String trimmed = line.trim();
+                if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                    subscribed.add(trimmed);
+                }
+            }
+        } catch (IOException error) {
+            log("не смог прочитать subscribed.txt: " + error);
+        }
+    }
+
+    private void saveSubscribed() {
+        Path file = subscribedFile();
+        try {
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            List<String> lines = new ArrayList<>();
+            lines.add("# Чаты, которые привязали аккаунт кодом из игры: они получают рассылку.");
+            subscribed.stream().sorted().forEach(lines::add);
+            Files.write(file, lines, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            log("не смог записать subscribed.txt: " + error);
+        }
+    }
+
+    /** Подписать чат на рассылку: привязка аккаунта и есть подписка. */
+    private void addSubscriber(String chatId) {
+        if (chatId == null || chatId.isBlank()) {
+            return;
+        }
+        if (!subscribed.contains(chatId)) {
+            subscribed.add(chatId);
+            saveSubscribed();
+        }
+        if (!disabledChats.contains(chatId) && !chats.contains(chatId)) {
+            chats.add(chatId);
+            log(messages.get("chat-subscribed", chatLabel(chatId)));
+            refreshChatNames(true);
+        }
+    }
+
+    /** Незнакомцу подсказываем, как привязать аккаунт: не чаще раза в полчаса. */
+    private void askToLink(String chatId) {
+        if (chatId == null || chatId.isBlank()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Long last = linkHints.get(chatId);
+        if (last != null && now - last < 30 * 60_000L) {
+            return;
+        }
+        linkHints.put(chatId, now);
+        enqueueTo(List.of(chatId), messages.get("link-required"));
+        log(messages.get("link-required-log", chatId));
     }
 
     /** Подпись чата для логов: «имя» (id), а если имени нет — просто id. */
@@ -619,6 +705,7 @@ public final class TgRelay extends JavaPlugin {
 
         configuredChats = config.getStringList("bot.chats").size();
         loadDisabledChats();
+        loadSubscribed();
         loadChatNames();
         chats.clear();
         int skipped = 0;
@@ -635,6 +722,11 @@ public final class TgRelay extends JavaPlugin {
         }
         if (skipped > 0) {
             getLogger().info(messages.get("chats-skipped", skipped));
+        }
+        for (String id : subscribed) {
+            if (!disabledChats.contains(id) && !chats.contains(id)) {
+                chats.add(id);
+            }
         }
         listenChats = new java.util.ArrayList<>(config.getStringList("bot.listen"));
         if (listenChats.isEmpty()) {
@@ -676,6 +768,7 @@ public final class TgRelay extends JavaPlugin {
             moderationChat = "";
         }
 
+        linkingRequired = config.getBoolean("linking.required", true);
         noticesEnabled = config.getBoolean("notices.enabled", true);
         noticesPrefix = config.getString("notices.prefix", "[TgRelay] ");
         pollFailureLimit = Math.max(1, config.getInt("notices.poll-failures", 5));
@@ -913,6 +1006,11 @@ public final class TgRelay extends JavaPlugin {
                     if (tryLink(update)) {
                         continue;
                     }
+                    if (linkingRequired && links.playerOf(update.fromId) == null) {
+                        // без привязки некому верить: просим код из игры
+                        askToLink(update.chatId);
+                        continue;
+                    }
                     if (!listenChats.contains(update.chatId)) {
                         continue;   // ignore chats we were not configured for
                     }
@@ -1059,6 +1157,8 @@ public final class TgRelay extends JavaPlugin {
             getServer().getScheduler().runTask(this, () ->
                     online.sendMessage(Component.text(messages.get("link-done"))));
         }
+        addSubscriber(update.chatId);
+        enqueueTo(List.of(update.chatId), messages.get("link-welcome", name));
         log(messages.get("link-log", name, update.fromId));
         return true;
     }
@@ -1169,6 +1269,10 @@ public final class TgRelay extends JavaPlugin {
         if (code == null) {
             sender.sendMessage(Component.text(messages.get("link-busy")));
             return true;
+        }
+        if (isSpoke() && bridge != null) {
+            // бот живёт на главном сервере: код надо отдать туда, иначе он умрёт здесь
+            bridge.postLinkCode(code, player.getUniqueId().toString(), player.getName());
         }
         sender.sendMessage(Component.text(messages.get("link-code", code, 10)));
         return true;

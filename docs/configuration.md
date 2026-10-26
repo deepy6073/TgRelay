@@ -267,6 +267,27 @@ Mutes are stored in `plugins/TgRelay/muted.txt`, one UUID per line — survive r
 
 ---
 
+## `linking` — who may post into the game
+
+```yaml
+linking:
+  required: true
+```
+
+With `required: true` (default) a Telegram account must be linked before its messages reach the
+game: in game `/tgrelay link`, then send the six-character code to the bot. Anyone else gets the
+same instruction once per half an hour and nothing is relayed — the game chat belongs to players,
+not to whoever found the bot.
+
+Linking *is* the subscription: a chat that sends a valid code is added to `bot.chats` and starts
+receiving the feed, so new players can join without an admin editing the config. Those chats are
+stored in `plugins/TgRelay/subscribed.txt`.
+
+`required: false` restores the loose mode: any chat from `bot.chats` may post and is named by its
+Telegram profile.
+
+---
+
 ## `moderation` — where muted messages go
 
 ```yaml
@@ -301,6 +322,7 @@ On first start the plugin imports `linkedChats` from an old `plugins/TelegramCha
 | `plugins/TgRelay/state.json` | `{"offset": …}` — the update offset. It is what stops a restart from replaying old Telegram messages into the game. Delete it to start over (the backlog will be replayed). |
 | `plugins/TgRelay/muted.txt` | UUIDs of players who muted themselves. |
 | `plugins/TgRelay/linked.txt` | `<telegram id> <uuid>` pairs. |
+| `plugins/TgRelay/subscribed.txt` | Chats that linked an account and therefore joined `bot.chats` on their own. |
 | `plugins/TgRelay/chat-names.txt` | `<chat id> <name>` — human names for logs and `/tgrelay chats`, refreshed from Telegram on start. Nothing in the relay depends on it. |
 | `plugins/TgRelay/disabled-chats.txt` | Chats the plugin stopped writing to because Telegram said the bot is blocked or the chat is gone. They stay out of `bot.chats` across restarts; delete a line and run `/tgrelay reload` to try again. |
 

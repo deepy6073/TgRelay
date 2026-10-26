@@ -102,6 +102,13 @@ mute:
 moderation:
   chat: ""
 
+# Who may post from Telegram into the game.
+linking:
+  # true  — only accounts linked with /tgrelay link may post; everyone else gets
+  #         a short instruction with the one-time code
+  # false — any chat from bot.chats may post, named by its Telegram profile
+  required: true
+
 # Technical messages for admins (not for players): server started, server is
 # stopping, Telegram unreachable for a while. They go to moderation.chat when it
 # is set, otherwise to a DM of every linked operator, otherwise to the console.

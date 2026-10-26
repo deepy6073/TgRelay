@@ -93,3 +93,8 @@ chats-header: "Чаты бота: живых %d из %d, отключённых 
 chats-live: "  + %s"
 chats-dead: "  - %s — бот заблокирован или чат удалён"
 usage: "Использование: /tgrelay off | on | link | unlink | status (админ: reload | testmute | chats)"
+link-required: "Чтобы писать в игру, привяжи аккаунт: зайди в игру, выполни /tgrelay link и пришли мне шестизначный код сюда."
+link-required-log: "подсказал привязать аккаунт: %s"
+link-welcome: "Готово: теперь твои сообщения идут в игру под ником %s."
+chat-subscribed: "чат %s подписался на рассылку (привязка аккаунта)"
+link-code-from-spoke: "код привязки с второго сервера: %s (%s)"
