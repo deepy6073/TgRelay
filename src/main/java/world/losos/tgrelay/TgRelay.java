@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -42,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * The message is not lost — it goes to the moderation channel (a separate chat, or a DM
  * to every op that linked a Telegram account) with a {@code [mute]} prefix.
  */
-public final class TgRelay extends JavaPlugin {
+public final class TgRelay extends JavaPlugin implements TabCompleter {
 
     /** Сообщение в очереди на отправку. targets == null — обычные чаты из конфига. */
     private static final class Outgoing {
@@ -190,6 +191,9 @@ public final class TgRelay extends JavaPlugin {
         sender.setDaemon(true);
         sender.start();
 
+        if (getCommand("tgrelay") != null) {
+            getCommand("tgrelay").setTabCompleter(this);
+        }
         getServer().getPluginManager().registerEvents(new McEvents(this), this);
         if (isSpoke()) {
             getLogger().info(messages.get("started-spoke", serverName, relayHub));
@@ -1182,6 +1186,34 @@ public final class TgRelay extends JavaPlugin {
 
 
     /* ── команды ── */
+
+    /** Подкоманды для TAB: игроку — свои, админу — все. */
+    private static final List<String> PLAYER_SUBCOMMANDS =
+            List.of("off", "on", "link", "unlink", "status");
+    private static final List<String> ADMIN_SUBCOMMANDS =
+            List.of("reload", "testmute", "chats");
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length > 1) {
+            return List.of();
+        }
+        String typed = args.length == 1 ? args[0].toLowerCase(Locale.ROOT) : "";
+        List<String> result = new ArrayList<>();
+        for (String sub : PLAYER_SUBCOMMANDS) {
+            if (sub.startsWith(typed)) {
+                result.add(sub);
+            }
+        }
+        if (sender.hasPermission("tgrelay.admin")) {
+            for (String sub : ADMIN_SUBCOMMANDS) {
+                if (sub.startsWith(typed)) {
+                    result.add(sub);
+                }
+            }
+        }
+        return result;
+    }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
