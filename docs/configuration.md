@@ -39,6 +39,12 @@ format:
 
 An empty name removes the placeholder's text entirely — that is the single-server default.
 
+`server.emoji` is the same idea with one emoji instead of a word: two servers in one chat are
+easier to tell apart by `🐟` and `🧱` than by `[Losos]` and `[Build]`. Use it in the formats as
+`%server_emoji%`, e.g. `from-minecraft: "%server_emoji% %player%: %message%"`. Emoji render fine
+in Telegram; in Minecraft only do this if your resource pack has the glyphs, otherwise keep the
+text form in `to-minecraft`.
+
 ## `bot`
 
 ```yaml
@@ -122,6 +128,7 @@ format:
 | `%message%` | chat text | message text |
 | `%sender%` | — | the Minecraft nickname when the Telegram account is linked (`/tgrelay link`), otherwise the Telegram display name |
 | `%server%` | `server.name` | `server.name` |
+| `%server_emoji%` | `server.emoji` | `server.emoji` |
 
 `%server%` also works in `events.*-format` and in `mute.prefix`. With an empty `server.name` it expands to nothing, so a single-server setup never sees a stray empty bracket.
 

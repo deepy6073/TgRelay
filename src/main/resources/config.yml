@@ -10,6 +10,10 @@ server:
   # Example: name "Build" + from-minecraft "[%server%] %player%: %message%"
   # gives "[Build] Alex: hello". Empty means "no name, no prefix".
   name: ""
+  # Optional marker instead of a name: %server_emoji% in the formats. One emoji
+  # per server reads faster than a word and needs no translation, e.g. a fish
+  # for the survival world and a brick for the creative one.
+  emoji: ""
 
 # Several servers, one bot.
 #

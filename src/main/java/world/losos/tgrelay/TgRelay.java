@@ -123,6 +123,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
 
     /* ── несколько серверов на одном боте ── */
     private String serverName = "";
+    private String serverEmoji = "";
     private String relayMode = MODE_STANDALONE;
     private String relayToken = "";
     private String relayBind = "";
@@ -672,6 +673,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         messages = new Messages(this, config.getString("language", "en"));
 
         serverName = text(config.getString("server.name", ""));
+        serverEmoji = text(config.getString("server.emoji", ""));
         relayMode = text(config.getString("relay.mode", MODE_STANDALONE)).toLowerCase(Locale.ROOT);
         if (!MODE_HUB.equals(relayMode) && !MODE_SPOKE.equals(relayMode)) {
             relayMode = MODE_STANDALONE;
@@ -805,10 +807,17 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
 
     /** Подставляет имя сервера: {@code %server%} в шаблонах сообщений. */
     private String withServer(String line) {
-        if (serverName.isEmpty() || line.indexOf("%server%") < 0) {
-            return line;
+        if (line == null) {
+            return null;
         }
-        return line.replace("%server%", serverName);
+        String result = line;
+        if (!serverEmoji.isEmpty() && result.indexOf("%server_emoji%") >= 0) {
+            result = result.replace("%server_emoji%", serverEmoji);
+        }
+        if (!serverName.isEmpty() && result.indexOf("%server%") >= 0) {
+            result = result.replace("%server%", serverName);
+        }
+        return result;
     }
 
     /* ── Minecraft -> Telegram ── */
@@ -898,7 +907,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
             log(messages.get("notices-console", text));
             return;
         }
-        enqueueTo(targets, noticesPrefix + text);
+        enqueueTo(targets, withServer(noticesPrefix + text));
     }
 
     /** Puts an already formatted line into the outbound queue (обычные чаты). */
