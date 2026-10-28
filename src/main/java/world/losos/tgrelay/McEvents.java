@@ -103,6 +103,8 @@ public final class McEvents implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         // если в игре никого не было, придержанные сообщения из Telegram отдаём сейчас
         plugin.flushPending();
+        // голову качаем сразу при входе, чтобы первая же строка пришла с ней
+        plugin.prefetchAvatar(event.getPlayer().getName());
 
         if (!enabled("join")) {
             return;

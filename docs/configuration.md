@@ -274,6 +274,38 @@ Mutes are stored in `plugins/TgRelay/muted.txt`, one UUID per line — survive r
 
 ---
 
+## `telegram` — badge plates and player heads
+
+```yaml
+telegram:
+  badges:
+    losos:
+      fallback: "🐟"
+      tiles: ["5409251626999391208", "5409246550348048597"]
+  avatars:
+    enabled: true
+    pack: my_server_avatars_by_MyBot
+    owner-id: 123456789        # the user who owns the pack
+    fallback: "🧑"
+```
+
+**Badges** are words drawn as pictures and cut into 100×100 tiles, one Telegram custom emoji per
+tile; write `{losos}` anywhere in a format and the plate appears. A plate is several tiles in a row,
+so the letters stay readable at chat size — a single 100×100 tile cannot hold a five-letter word
+without turning into a smudge. `fallback` is the character that stays in the message text (old
+clients show it instead of the picture).
+
+**Avatars** put the player's own head where the author goes. The plugin downloads the head once,
+adds it to the pack and keeps the id in `avatars.txt`; the first line of a brand-new player may
+arrive without a head while it downloads. The pack must belong to a user (bots cannot own custom
+emoji packs), so `owner-id` is that user's Telegram id — and the bot may use custom emoji only
+when its owner has Telegram Premium.
+
+Both features degrade quietly: no pack, no permission, no network — the line goes out as plain
+text with the fallback emoji.
+
+---
+
 ## `linking` — who may post into the game
 
 ```yaml

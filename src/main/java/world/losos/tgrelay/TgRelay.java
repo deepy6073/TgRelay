@@ -6,15 +6,21 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -124,6 +130,15 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
     /* ── несколько серверов на одном боте ── */
     private String serverName = "";
     private String serverEmoji = "";
+    /** Плашки-бейджи: имя → плитки пака. В тексте пишется {имя}. */
+    private final Map<String, TelegramApi.Badge> badges = new ConcurrentHashMap<>();
+    /** Головы игроков: ник → custom_emoji_id в паке аватарок. */
+    private final Map<String, String> avatars = new ConcurrentHashMap<>();
+    private final Set<String> avatarsPending = ConcurrentHashMap.newKeySet();
+    private boolean avatarsEnabled;
+    private String avatarPack = "";
+    private long avatarOwnerId;
+    private String avatarFallback = "🧑";
     private String relayMode = MODE_STANDALONE;
     private String relayToken = "";
     private String relayBind = "";
@@ -166,6 +181,8 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         }
 
         api = new TelegramApi(botToken, messages);
+        api.badges(badges);
+        api.avatars(avatars, avatarFallback);
 
         // offset переживает перезапуск: иначе после рестарта мост заново
         // прочитает всю накопившуюся историю и вывалит её в игровой чат
@@ -222,7 +239,8 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         if (targets.isEmpty()) {
             return;
         }
-        String text = noticesPrefix + messages.get("server-stopping", serverName.isEmpty() ? "?" : serverName);
+        String text = withServer(noticesPrefix
+                + messages.get("server-stopping", serverName.isEmpty() ? "?" : serverName));
         for (String chat : targets) {
             try {
                 api.send(chat, text);
@@ -318,6 +336,128 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
             getServer().getOnlinePlayers().forEach(player -> player.sendMessage(text));
         }
         log(messages.get("flushed", lines.size()));
+    }
+
+    /** telegram.badges: имя плашки → резервный эмодзи и id плиток по порядку. */
+    private void loadBadges() {
+        badges.clear();
+        ConfigurationSection section = getConfig().getConfigurationSection("telegram.badges");
+        if (section != null) {
+            for (String name : section.getKeys(false)) {
+                ConfigurationSection badge = section.getConfigurationSection(name);
+                if (badge == null) {
+                    continue;
+                }
+                List<String> tiles = new ArrayList<>();
+                for (String tile : badge.getStringList("tiles")) {
+                    String id = text(tile);
+                    if (!id.isEmpty()) {
+                        tiles.add(id);
+                    }
+                }
+                String fallback = text(badge.getString("fallback", ""));
+                if (!tiles.isEmpty() && !fallback.isEmpty()) {
+                    badges.put(name, new TelegramApi.Badge(fallback, tiles));
+                }
+            }
+        }
+        if (api != null) {
+            api.badges(badges);
+        }
+    }
+
+    /** telegram.avatars: головы игроков плашкой автора. */
+    private void loadAvatars() {
+        avatarsEnabled = getConfig().getBoolean("telegram.avatars.enabled", false);
+        avatarPack = text(getConfig().getString("telegram.avatars.pack", ""));
+        avatarOwnerId = getConfig().getLong("telegram.avatars.owner-id", 0L);
+        String fallback = text(getConfig().getString("telegram.avatars.fallback", "🧑"));
+        avatarFallback = fallback.isEmpty() ? "🧑" : fallback;
+
+        avatars.clear();
+        Path file = avatarFile();
+        if (Files.isRegularFile(file)) {
+            try {
+                for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                    String trimmed = line.trim();
+                    if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                        continue;
+                    }
+                    int space = trimmed.indexOf(' ');
+                    if (space > 0) {
+                        avatars.put(trimmed.substring(0, space), trimmed.substring(space + 1).trim());
+                    }
+                }
+            } catch (IOException error) {
+                log("не смог прочитать avatars.txt: " + error);
+            }
+        }
+        if (api != null) {
+            api.avatars(avatars, avatarFallback);
+        }
+        log(messages.get("avatars-state", avatarsEnabled ? "on" : "off",
+                avatarPack.isEmpty() ? "-" : avatarPack, avatars.size()));
+    }
+
+    private Path avatarFile() {
+        return getDataFolder().toPath().resolve("avatars.txt");
+    }
+
+    private synchronized void saveAvatars() {
+        Path file = avatarFile();
+        try {
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            List<String> lines = new ArrayList<>();
+            lines.add("# Ник игрока и id его головы в паке аватарок.");
+            avatars.forEach((nick, id) -> lines.add(nick + " " + id));
+            Files.write(file, lines, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            log("не смог записать avatars.txt: " + error);
+        }
+    }
+
+    /** Голова нужна и при входе: тогда первая строка чата уже с ней. */
+    void prefetchAvatar(String nick) {
+        ensureAvatar(nick);
+    }
+
+    /** Добавляет голову игрока в пак, если её ещё нет. Не блокирует чат. */
+    private void ensureAvatar(String nick) {
+        if (!avatarsEnabled || nick == null || nick.isBlank() || avatarPack.isBlank() || avatarOwnerId == 0L) {
+            return;
+        }
+        if (avatars.containsKey(nick) || !avatarsPending.add(nick)) {
+            return;
+        }
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+                HttpRequest request = HttpRequest.newBuilder(
+                                URI.create("https://mc-heads.net/avatar/" + nick + "/100"))
+                        .timeout(Duration.ofSeconds(15)).build();
+                HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                if (response.statusCode() != 200 || response.body().length == 0) {
+                    log("нет картинки головы для " + nick + ": HTTP " + response.statusCode());
+                    return;
+                }
+                String id = api.addAvatarSticker(avatarPack, avatarOwnerId, nick, response.body(), avatarFallback);
+                if (id != null && !id.isEmpty() && !"null".equals(id)) {
+                    avatars.put(nick, id);
+                    saveAvatars();
+                    if (api != null) {
+                        api.avatars(avatars, avatarFallback);
+                    }
+                    log(messages.get("avatar-added", nick));
+                }
+            } catch (Exception error) {
+                log("не смог добавить голову " + nick + ": " + error);
+            } finally {
+                avatarsPending.remove(nick);
+            }
+        });
     }
 
     private Path subscribedFile() {
@@ -775,6 +915,8 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         }
 
         linkingRequired = config.getBoolean("linking.required", true);
+        loadBadges();
+        loadAvatars();
         noticesEnabled = config.getBoolean("notices.enabled", true);
         noticesPrefix = config.getString("notices.prefix", "[TgRelay] ");
         pollFailureLimit = Math.max(1, config.getInt("notices.poll-failures", 5));
@@ -827,7 +969,9 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         if (message == null || message.isBlank()) {
             return;
         }
+        ensureAvatar(player.getName());
         String line = withServer(formatFromMc
+                .replace("%avatar%", avatarsEnabled ? "{avatar:" + player.getName() + "}" : "")
                 .replace("%player%", player.getName())
                 .replace("%message%", message));
         deliver(player.getUniqueId(), line, true);
@@ -838,7 +982,9 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         if (line == null || line.isBlank()) {
             return;
         }
-        deliver(player.getUniqueId(), withServer(line), muteEvents);
+        String prepared = line.replace("%avatar%",
+                avatarsEnabled ? "{avatar:" + player.getName() + "}" : "");
+        deliver(player.getUniqueId(), withServer(prepared), muteEvents);
     }
 
     private void deliver(UUID player, String line, boolean muteApplies) {
@@ -846,12 +992,18 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
             relayMuted(line);
             return;
         }
-        enqueue(line);
+        enqueue(line.replace("%tag%", ""));
     }
 
     /** Заглушённое сообщение: админский чат, личка привязанным опам или консоль. */
     private void relayMuted(String line) {
-        String text = withServer(mutePrefix + line);
+        String body;
+        if (line.contains("%tag%")) {
+            body = line.replace("%tag%", mutePrefix.isBlank() ? "" : mutePrefix + " ");
+        } else {
+            body = mutePrefix.isBlank() ? line : mutePrefix + " " + line;
+        }
+        String text = withServer(body);
         if (isSpoke()) {
             // куда именно — решает главный сервер: у него канал модерации и привязки админов
             enqueueMuted(text);
@@ -1029,6 +1181,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
                     }
 
                     String line = withServer(formatToMc
+                            .replace("%tag%", "")
                             .replace("%sender%", minecraftName(update.fromId, update.sender))
                             .replace("%message%", update.text));
                     if (isHub() && bridge != null) {

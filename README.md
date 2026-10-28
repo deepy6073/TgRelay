@@ -40,6 +40,15 @@ TgRelay does it properly:
 * **server messages and admin notices** — `/say` reaches the chat, and "server started / stopping / Telegram is down" reaches the admins;
 * no third-party HTTP libraries — only the JDK and the server API.
 
+## What it looks like
+
+![Game chat with badges](docs/img/chat-overview.png)
+
+A line carries the world it came from, then a tag when there is one, then the author — and the
+author is their own skin head, not a Telegram handle.
+
+![Heads instead of handles](docs/img/chat-heads.png)
+
 ## Install
 
 1. Download `TgRelay.jar` from [Hangar](https://hangar.papermc.io/Stil00000/TgRelay) or the [GitHub releases](https://github.com/deepy6073/TgRelay/releases) and drop it into `plugins/`.
@@ -177,6 +186,12 @@ Requires JDK 21+.
 * **Only linked accounts post into the game.** `/tgrelay link` in game → send the code to the bot;
   anyone else gets the instruction and nothing reaches the chat. Linking doubles as a subscription:
   the chat starts receiving the feed without an admin touching the config.
+* **Badges instead of words.** `/tgrelay` ships with `{losos}`, `{build}`, `{mute}` and `{relay}`
+  placeholders: each expands to a plate from a custom emoji pack, cut into 100×100 tiles so the word
+  stays readable at chat size. Plates are configurable per server, so two worlds in one chat stay
+  apart without reading anything.
+* **Player heads as the author badge.** The plugin takes the skin head once, adds it to its own
+  pack and remembers the id — after the first join a player is shown as they look in game.
 * A linked player is named by their **Minecraft nickname** in both directions — Telegram messages
   reach the game under the name other players know, not under a Telegram handle.
 * Every Telegram message is copied into the bot chats (except the chat it came from), so you see

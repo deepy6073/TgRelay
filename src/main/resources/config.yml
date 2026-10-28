@@ -41,6 +41,61 @@ relay:
   # Spoke only: where the hub listens.
   hub: "http://127.0.0.1:8765"
 
+# Badge plates: a word drawn as a picture and cut into 100x100 tiles, one custom emoji
+# per tile. Write {name} anywhere in a format and it becomes the plate. Take the ids
+# with getStickerSet and list the tiles in the order they were cut.
+#
+#   telegram:
+#     badges:
+#       losos:
+#         fallback: "🐟"
+#         tiles: ["5409250961279461863", "5409015811820005500", "5408879674241623000"]
+#
+# Bots may use custom emoji when the bot's owner has Telegram Premium; everyone can
+# see them. Without the pack the text still works — the fallback emoji shows instead.
+telegram:
+  badges: {}
+  # Player heads as the author's badge: the plugin downloads the skin head once per
+  # player and adds it to the pack, then every chat line of that player starts with it.
+  # The pack must exist and belong to the id in owner-id (a user, not a bot).
+  avatars:
+    enabled: false
+    pack: ""
+    owner-id: 0
+    fallback: "🧑"
+
+bot: posts its own chat, accepts lines from spokes and
+#                sends every Telegram message back to them
+#   spoke      — no bot of its own: sends its chat to the hub, prints what the hub
+#                sends back. bot.token and bot.chats are not used here.
+#
+# A spoke needs: relay.mode: spoke, the same relay.token as the hub, relay.hub pointing
+# at the hub and its own relay.bind. The hub lists its spokes in relay.spokes.
+relay:
+  mode: standalone
+  # Shared secret, at least a dozen random characters. Both sides must match.
+  token: ""
+  # Where the listener binds. Keep it on loopback unless the servers are on different
+  # machines — then it has to be reachable from the hub (and the secret is not optional).
+  bind: "127.0.0.1:8765"
+  # Hub only: every server that reports to this hub.
+  spokes:
+    - "http://127.0.0.1:8766"
+  # Spoke only: where the hub listens.
+  hub: "http://127.0.0.1:8765"
+
+# Custom emoji badges: a normal emoji in the message text is replaced by a picture
+# from a Telegram custom emoji pack. Take the ids with getStickerSet, put them here,
+# and the bot swaps them in every message it sends. Bots may use custom emoji when
+# the bot's owner has Telegram Premium; everyone can see them.
+#
+#   telegram:
+#     emoji:
+#       "🔁": "5406853940031563644"
+#       "🔇": "5409225092691439135"
+telegram:
+  emoji: {}
+
 bot:
   # Token from @BotFather.
   token: "PUT_BOT_TOKEN_HERE"
