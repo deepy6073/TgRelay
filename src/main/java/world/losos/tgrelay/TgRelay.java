@@ -11,8 +11,14 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -22,7 +28,9 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
+import javax.imageio.ImageIO;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -520,15 +528,24 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         getServer().getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-                HttpRequest request = HttpRequest.newBuilder(
-                                URI.create("https://mc-heads.net/avatar/" + nick + "/100"))
-                        .timeout(Duration.ofSeconds(15)).build();
-                HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-                if (response.statusCode() != 200 || response.body().length == 0) {
-                    log("нет картинки головы для " + nick + ": HTTP " + response.statusCode());
-                    return;
+                byte[] head = null;
+                try {
+                    head = officialHead(http, nick);
+                } catch (Exception error) {
+                    log("официальная голова " + nick + " не вышла: " + error);
                 }
-                String id = api.addAvatarSticker(avatarPack, avatarOwnerId, nick, response.body(), avatarFallback);
+                if (head == null || head.length == 0) {
+                    HttpRequest request = HttpRequest.newBuilder(
+                                    URI.create("https://mc-heads.net/avatar/" + nick + "/100"))
+                            .timeout(Duration.ofSeconds(15)).build();
+                    HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                    if (response.statusCode() != 200 || response.body().length == 0) {
+                        log("нет картинки головы для " + nick + ": HTTP " + response.statusCode());
+                        return;
+                    }
+                    head = response.body();
+                }
+                String id = api.addAvatarSticker(avatarPack, avatarOwnerId, nick, head, avatarFallback);
                 if (id != null && !id.isEmpty() && !"null".equals(id)) {
                     avatars.put(nick, id);
                     saveAvatars();
@@ -543,6 +560,118 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
                 avatarsPending.remove(nick);
             }
         });
+    }
+
+    /**
+     * Голова из официального источника.
+     *
+     * mc-heads.net знает не всех: по Den140 он отдавал дефолтного Стива, хотя Mojang
+     * отдаёт настоящий скин. Поэтому идём в Mojang (ник → UUID → текстуры) и вырезаем
+     * голову из скина сами; mc-heads остаётся только запасным вариантом.
+     */
+    private static byte[] officialHead(HttpClient http, String nick) throws Exception {
+        String encoded = URLEncoder.encode(nick, StandardCharsets.UTF_8);
+        HttpRequest lookup = HttpRequest.newBuilder(
+                        URI.create("https://api.mojang.com/users/profiles/minecraft/" + encoded))
+                .timeout(Duration.ofSeconds(10)).build();
+        HttpResponse<String> lookupResponse = http.send(lookup, HttpResponse.BodyHandlers.ofString());
+        if (lookupResponse.statusCode() != 200) {
+            return null;
+        }
+        Object id = Json.parseObject(lookupResponse.body()).get("id");
+        if (!(id instanceof String) || ((String) id).isBlank()) {
+            return null;
+        }
+        HttpRequest session = HttpRequest.newBuilder(
+                        URI.create("https://sessionserver.mojang.com/session/minecraft/profile/" + id))
+                .timeout(Duration.ofSeconds(10)).build();
+        HttpResponse<String> sessionResponse = http.send(session, HttpResponse.BodyHandlers.ofString());
+        if (sessionResponse.statusCode() != 200) {
+            return null;
+        }
+        String skinUrl = skinUrl(Json.parseObject(sessionResponse.body()));
+        if (skinUrl == null) {
+            return null;
+        }
+        HttpRequest skin = HttpRequest.newBuilder(URI.create(skinUrl))
+                .timeout(Duration.ofSeconds(15)).build();
+        HttpResponse<byte[]> skinResponse = http.send(skin, HttpResponse.BodyHandlers.ofByteArray());
+        if (skinResponse.statusCode() != 200 || skinResponse.body().length == 0) {
+            return null;
+        }
+        return headImage(skinResponse.body());
+    }
+
+    /** Достаёт ссылку на скин из properties профиля Mojang (base64 → JSON). */
+    private static String skinUrl(Map<String, Object> profile) {
+        Object properties = profile.get("properties");
+        if (!(properties instanceof List<?> list)) {
+            return null;
+        }
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> property)) {
+                continue;
+            }
+            Object value = property.get("value");
+            if (!(value instanceof String text)) {
+                continue;
+            }
+            try {
+                Map<String, Object> decoded = Json.parseObject(
+                        new String(Base64.getDecoder().decode(text), StandardCharsets.UTF_8));
+                Object textures = decoded.get("textures");
+                if (!(textures instanceof Map<?, ?> texturesMap)) {
+                    continue;
+                }
+                Object skin = texturesMap.get("SKIN");
+                if (skin instanceof Map<?, ?> skinMap && skinMap.get("url") instanceof String url) {
+                    return url;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // битая base64 — пробуем следующее свойство
+            }
+        }
+        return null;
+    }
+
+    /** Вырезает лицо 8×8 (со вторым слоем) и растягивает до 100×100 без сглаживания. */
+    private static byte[] headImage(byte[] skinBytes) throws IOException {
+        BufferedImage skin = ImageIO.read(new ByteArrayInputStream(skinBytes));
+        if (skin == null || skin.getWidth() < 64 || skin.getHeight() < 32) {
+            return null;
+        }
+        BufferedImage face = new BufferedImage(8, 8, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                face.setRGB(x, y, over(skin.getRGB(8 + x, 8 + y), skin.getRGB(40 + x, 8 + y)));
+            }
+        }
+        BufferedImage out = new BufferedImage(100, 100, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = out.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        graphics.drawImage(face, 0, 0, 100, 100, null);
+        graphics.dispose();
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        ImageIO.write(out, "png", png);
+        return png.toByteArray();
+    }
+
+    /** Второй слой скина (шапка, волосы) поверх базового — обычный src-over. */
+    private static int over(int base, int top) {
+        int alpha = (top >>> 24) & 0xFF;
+        if (alpha == 0) {
+            return base;
+        }
+        if (alpha == 255) {
+            return top;
+        }
+        int inverse = 255 - alpha;
+        int red = (((top >> 16) & 0xFF) * alpha + ((base >> 16) & 0xFF) * inverse) / 255;
+        int green = (((top >> 8) & 0xFF) * alpha + ((base >> 8) & 0xFF) * inverse) / 255;
+        int blue = ((top & 0xFF) * alpha + (base & 0xFF) * inverse) / 255;
+        int resultAlpha = alpha + (((base >>> 24) & 0xFF) * inverse) / 255;
+        return (resultAlpha << 24) | (red << 16) | (green << 8) | blue;
     }
 
     private Path subscribedFile() {
