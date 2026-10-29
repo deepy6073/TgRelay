@@ -223,7 +223,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         if (links.size() > 0) {
             getLogger().info(messages.get("links-loaded", links.size()));
         }
-        notifyAdmins(messages.get("server-started", serverName.isEmpty() ? "?" : serverName));
+        notifyAdmins(messages.get("server-started"));
         refreshChatNames(true);
     }
 
@@ -1162,7 +1162,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
                 List<TelegramApi.Update> updates = api.poll(offset.get() + 1, pollTimeout);
                 if (pollFailures.get() != 0) {
                     pollFailures.set(0);
-                    notifyAdmins(messages.get("telegram-up", serverName.isEmpty() ? "?" : serverName));
+                    notifyAdmins(messages.get("telegram-up"));
                 }
                 long highest = offset.get();
                 for (TelegramApi.Update update : updates) {
