@@ -51,12 +51,14 @@ public final class McEvents implements Listener {
     /** {@code say ...} из консоли сервера. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onConsoleCommand(ServerCommandEvent event) {
+        plugin.noteStopCommand(event.getCommand(), "консоль");
         relaySay(event.getCommand());
     }
 
     /** {@code say ...} по RCON. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onRemoteCommand(RemoteServerCommandEvent event) {
+        plugin.noteStopCommand(event.getCommand(), "RCON");
         relaySay(event.getCommand());
     }
 

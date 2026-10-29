@@ -23,6 +23,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -139,6 +140,9 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
     private String avatarPack = "";
     private long avatarOwnerId;
     private String avatarFallback = "🧑";
+    /** Причина и инициатор ближайшей остановки: пишутся в уведомление и в файл. */
+    private volatile String stopReason = "";
+    private volatile String stopInitiator = "";
     private String relayMode = MODE_STANDALONE;
     private String relayToken = "";
     private String relayBind = "";
@@ -223,7 +227,15 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         if (links.size() > 0) {
             getLogger().info(messages.get("links-loaded", links.size()));
         }
-        notifyAdmins(messages.get("server-started"));
+        Map<String, String> last = readStop();
+        if (last.isEmpty()) {
+            notifyAdmins(messages.get("server-started"));
+        } else {
+            notifyAdmins(messages.get("server-started-after",
+                    last.getOrDefault("time", "?"),
+                    last.getOrDefault("who", "?"),
+                    last.getOrDefault("reason", "?")));
+        }
         refreshChatNames(true);
     }
 
@@ -231,6 +243,76 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
      * Сообщение «сервер останавливается» отправляем напрямую: очередь к этому моменту
      * уже останавливается, и через неё сообщение не уйдёт.
      */
+    /** Ловим stop из консоли или RCON, чтобы уведомление знало инициатора. */
+    void noteStopCommand(String command, String who) {
+        if (command == null) {
+            return;
+        }
+        String trimmed = command.trim().toLowerCase(Locale.ROOT);
+        if (trimmed.equals("stop") || trimmed.startsWith("stop ")) {
+            if (stopInitiator.isEmpty()) {
+                stopInitiator = who;
+            }
+        }
+    }
+
+    private Path stopFile() {
+        return getDataFolder().toPath().resolve("last-stop.txt");
+    }
+
+    /** Rcon/CONSOLE — это технические имена, людям они ничего не говорят. */
+    private String humanWho(String who) {
+        if (who == null) {
+            return messages.get("stop-unknown-who");
+        }
+        String trimmed = who.trim();
+        if (trimmed.equalsIgnoreCase("rcon")) {
+            return messages.get("stop-who-rcon");
+        }
+        if (trimmed.equalsIgnoreCase("console") || trimmed.equalsIgnoreCase("server")) {
+            return messages.get("stop-who-console");
+        }
+        return trimmed;
+    }
+
+    private void saveStop() {
+        try {
+            Path file = stopFile();
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            String initiator = stopInitiator.isEmpty() ? messages.get("stop-unknown-who") : humanWho(stopInitiator);
+            String reason = stopReason.isEmpty() ? messages.get("stop-unknown-why") : stopReason;
+            List<String> lines = new ArrayList<>();
+            lines.add("time=" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm")));
+            lines.add("who=" + initiator);
+            lines.add("reason=" + reason);
+            Files.write(file, lines, StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            log("не смог записать last-stop.txt: " + error);
+        }
+    }
+
+    private Map<String, String> readStop() {
+        Map<String, String> data = new LinkedHashMap<>();
+        try {
+            Path file = stopFile();
+            if (!Files.isRegularFile(file)) {
+                return data;
+            }
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                int eq = line.indexOf('=');
+                if (eq > 0) {
+                    data.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
+                }
+            }
+        } catch (IOException error) {
+            log("не смог прочитать last-stop.txt: " + error);
+        }
+        return data;
+    }
+
     private void sendStoppingNotice() {
         if (!noticesEnabled || api == null) {
             return;
@@ -239,8 +321,11 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         if (targets.isEmpty()) {
             return;
         }
+        saveStop();
+        String who = stopInitiator.isEmpty() ? messages.get("stop-unknown-who") : humanWho(stopInitiator);
+        String why = stopReason.isEmpty() ? messages.get("stop-unknown-why") : stopReason;
         String text = withServer(noticesPrefix
-                + messages.get("server-stopping", serverName.isEmpty() ? "?" : serverName));
+                + messages.get("server-stopping", who, why));
         for (String chat : targets) {
             try {
                 api.send(chat, text);
@@ -1353,7 +1438,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
     private static final List<String> PLAYER_SUBCOMMANDS =
             List.of("off", "on", "link", "unlink", "status");
     private static final List<String> ADMIN_SUBCOMMANDS =
-            List.of("reload", "testmute", "chats");
+            List.of("reload", "testmute", "chats", "reason");
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
@@ -1417,6 +1502,21 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
                     return true;
                 }
                 return listChats(sender);
+            case "reason":
+                if (!requireAdmin(sender)) {
+                    return true;
+                }
+                if (args.length < 2) {
+                    sender.sendMessage(Component.text(messages.get("reason-usage")));
+                    return true;
+                }
+                String reason = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length)).trim();
+                stopReason = reason;
+                if (stopInitiator.isEmpty()) {
+                    stopInitiator = sender.getName();
+                }
+                sender.sendMessage(Component.text(messages.get("reason-set", reason)));
+                return true;
             default:
                 sender.sendMessage(Component.text(messages.get("usage")));
                 return true;

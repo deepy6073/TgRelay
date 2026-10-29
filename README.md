@@ -37,7 +37,7 @@ TgRelay does it properly:
 * **outbound queue** with a rate limit, so a chatty server cannot flood Telegram and get the bot throttled;
 * **backoff on errors** instead of a retry storm;
 * **several servers on one bot** — a hub/spoke bridge, so a second server reports into the same chat with its own prefix (below);
-* **server messages and admin notices** — `/say` reaches the chat, and "server started / stopping / Telegram is down" reaches the admins;
+* **server messages and admin notices** — `/say` reaches the chat, and "server started / stopping / Telegram is down" reaches the admins, with the reason and the initiator of a restart (`/tgrelay reason <text>`);
 * no third-party HTTP libraries — only the JDK and the server API.
 
 ## What it looks like

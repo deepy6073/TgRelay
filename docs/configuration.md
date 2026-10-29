@@ -379,6 +379,7 @@ All of them are plain text — safe to edit by hand; the two chat lists are re-r
 | `/tgrelay reload` | `tgrelay.admin` | re-read `config.yml` |
 | `/tgrelay testmute` | `tgrelay.admin` | send a test message through the moderation route |
 | `/tgrelay chats` | `tgrelay.admin` | list every chat: live ones and the ones Telegram threw out, with names instead of bare ids |
+| `/tgrelay reason <text>` | `tgrelay.admin` | record why the server is about to stop — the stopping notice and the next started notice carry it, together with who did it |
 
 `tgrelay.admin` defaults to op.
 
