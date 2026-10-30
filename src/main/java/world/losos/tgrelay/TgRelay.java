@@ -176,6 +176,11 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
     private String noticesPrefix;
     private int pollFailureLimit;
     private final AtomicLong pollFailures = new AtomicLong(0);
+    /** Объявлена ли уже авария: уведомляем только о переходе, а не о каждом сбое. */
+    private volatile boolean telegramDown;
+    private volatile long firstFailureAt;
+    /** Сколько секунд подряд должна длиться авария, чтобы о ней сообщать. */
+    private int outageSeconds = 120;
 
     static void log(String message) {
         if (instance != null) {
@@ -1134,6 +1139,7 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         noticesEnabled = config.getBoolean("notices.enabled", true);
         noticesPrefix = config.getString("notices.prefix", "[TgRelay] ");
         pollFailureLimit = Math.max(1, config.getInt("notices.poll-failures", 5));
+        outageSeconds = Math.max(30, config.getInt("notices.outage-seconds", 120));
 
         // Мост поднимается один раз в onEnable: сокет и потоки на лету не переедут,
         // поэтому на reload честно говорим, что нужен перезапуск, а не делаем вид.
@@ -1370,12 +1376,28 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         }
     }
 
+    /**
+     * Один опрос, но с вторым шансом: обрыв TLS у домашней линии часто одноразовый,
+     * и объявлять из-за него аварию незачем.
+     */
+    private List<TelegramApi.Update> pollOnce() throws Exception {
+        try {
+            return api.poll(offset.get() + 1, pollTimeout);
+        } catch (InterruptedException interrupted) {
+            throw interrupted;
+        } catch (Exception first) {
+            Thread.sleep(2000);
+            return api.poll(offset.get() + 1, pollTimeout);
+        }
+    }
+
     private void pollLoop() {
         while (running.get()) {
             try {
-                List<TelegramApi.Update> updates = api.poll(offset.get() + 1, pollTimeout);
-                if (pollFailures.get() != 0) {
-                    pollFailures.set(0);
+                List<TelegramApi.Update> updates = pollOnce();
+                if (pollFailures.getAndSet(0) != 0 && telegramDown) {
+                    telegramDown = false;
+                    firstFailureAt = 0L;
                     notifyAdmins(messages.get("telegram-up"));
                 }
                 long highest = offset.get();
@@ -1412,8 +1434,16 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
                 return;
             } catch (Exception error) {
                 log(messages.get("poll-failed", String.valueOf(error)));
-                if (pollFailures.incrementAndGet() == pollFailureLimit) {
-                    notifyAdmins(messages.get("telegram-down", pollFailureLimit,
+                long failures = pollFailures.incrementAndGet();
+                long now = System.currentTimeMillis();
+                if (firstFailureAt == 0L) {
+                    firstFailureAt = now;
+                }
+                // один SSL-блип — не авария: ждём либо N сбоев, либо outageSeconds подряд
+                boolean longEnough = now - firstFailureAt >= outageSeconds * 1000L;
+                if (!telegramDown && (failures >= pollFailureLimit || longEnough)) {
+                    telegramDown = true;
+                    notifyAdmins(messages.get("telegram-down", failures,
                             String.valueOf(error.getMessage())));
                 }
                 try {

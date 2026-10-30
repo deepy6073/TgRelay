@@ -176,6 +176,9 @@ notices:
   prefix: "[TgRelay] "
   # How many failed Telegram polls in a row before the admins hear about it once.
   poll-failures: 5
+  # Сколько секунд подряд связь должна отсутствовать, чтобы объявить аварию.
+  # Один SSL-блип — не повод писать админам.
+  outage-seconds: 120
 
 delivery:
   # Every message from Telegram is always copied into bot.chats (except the chat
