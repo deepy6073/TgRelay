@@ -179,6 +179,7 @@ queue:
 
 Outbound rate limit (clamped to 1–20). Telegram tolerates about 30 messages per second per bot; a busy server can easily exceed that during a chat flood, and throttling the bot gets you a ban. The queue holds up to 500 messages; anything beyond that is dropped with a console warning.
 
+| `outage-seconds` | How long the link must be down before the outage is announced (default 120). One dropped TLS handshake is retried once and is not an outage. |
 | `broadcast` | Server messages: `/say`, announcements from other plugins, anything that goes through the server broadcast. `say Сервер перезапустится через минуту` lands in the feed as `[Losos] Сервер перезапустится через минуту`. |
 
 ---
@@ -190,14 +191,17 @@ notices:
   enabled: true
   prefix: "[TgRelay] "
   poll-failures: 5
+  outage-seconds: 120
 ```
 
 Things that matter to whoever runs the server but would be noise for players:
 
 | When | Message |
 |---|---|
-| the plugin starts | `сервер Losos запущен` |
-| the server stops | `сервер Losos останавливается` |
+| the plugin starts | `Сервер запущен` — with the previous stop's time, initiator and reason if `last-stop.txt` exists |
+| the server stops | `Сервер останавливается — инициатор: RCON, причина: …` |
+| Telegram stops answering | after `poll-failures` failures **or** `outage-seconds` of continuous failure |
+| Telegram answers again | only if the outage was announced — a transition, not every hiccup |
 | Telegram stopped answering | `Telegram не отвечает (5 ошибок подряд)`, then `связь восстановлена` |
 
 They go where muted messages go: `moderation.chat` when it is set, otherwise a DM to every
