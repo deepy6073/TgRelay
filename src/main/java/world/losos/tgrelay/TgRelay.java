@@ -1395,10 +1395,13 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
         while (running.get()) {
             try {
                 List<TelegramApi.Update> updates = pollOnce();
-                if (pollFailures.getAndSet(0) != 0 && telegramDown) {
-                    telegramDown = false;
+                if (pollFailures.getAndSet(0) != 0) {
                     firstFailureAt = 0L;
-                    notifyAdmins(messages.get("telegram-up"));
+                    if (telegramDown) {
+                        telegramDown = false;
+                        log(messages.get("telegram-up"));
+                        notifyAdmins(messages.get("telegram-up"));
+                    }
                 }
                 long highest = offset.get();
                 for (TelegramApi.Update update : updates) {
@@ -1433,16 +1436,17 @@ public final class TgRelay extends JavaPlugin implements TabCompleter {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception error) {
-                log(messages.get("poll-failed", String.valueOf(error)));
                 long failures = pollFailures.incrementAndGet();
                 long now = System.currentTimeMillis();
                 if (firstFailureAt == 0L) {
                     firstFailureAt = now;
                 }
-                // один SSL-блип — не авария: ждём либо N сбоев, либо outageSeconds подряд
+                // в консоль пишем только аварию, а не каждый блип: одиночные таймауты
+                // при медленном канале — норма, их видно по счётчику в оповещении
                 boolean longEnough = now - firstFailureAt >= outageSeconds * 1000L;
                 if (!telegramDown && (failures >= pollFailureLimit || longEnough)) {
                     telegramDown = true;
+                    log(messages.get("poll-failed", String.valueOf(error)));
                     notifyAdmins(messages.get("telegram-down", failures,
                             String.valueOf(error.getMessage())));
                 }
