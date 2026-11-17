@@ -207,6 +207,10 @@ Things that matter to whoever runs the server but would be noise for players:
 They go where muted messages go: `moderation.chat` when it is set, otherwise a DM to every
 operator that linked an account, otherwise the server console. Nothing is broadcast to players.
 
+The same rule holds for the console log: a single timed-out long poll is retried and stays out
+of the log. The console gets one line when the outage is confirmed and one when the link is back,
+so a slow home line no longer fills the log with the same timeout every couple of minutes.
+
 ---
 
 ## `delivery`
